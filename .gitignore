@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+*.db
+seed_benchmark.db
+.pytest_cache/
