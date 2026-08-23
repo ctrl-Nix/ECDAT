@@ -1,0 +1,7 @@
+# DATABASE lane dependencies (Ronak).
+SQLAlchemy>=2.0,<2.1
+psycopg[binary]>=3.1        # Postgres driver used by DATABASE_URL (postgresql+psycopg://)
+python-dotenv>=1.0          # load .env in local dev
+
+# Dev/test only:
+pytest>=8.0
