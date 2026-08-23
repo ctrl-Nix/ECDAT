@@ -1,77 +1,37 @@
-# ECDAT — Enterprise Cryptographic Discovery & Analysis Tool
-### PS 26164 — SIH 2026, Blockchain & Cybersecurity track (KIIT Internal Round)
+# ECDAT — Enterprise Cryptographic Discovery & Quantum-Risk Analysis Platform
 
-An AST-based scanner that discovers cryptographic usage in Python source
-code, generates a CycloneDX-format Cryptography Bill of Materials (CBOM),
-scores each finding's exposure to future quantum attacks using an
-explainable, rule-based model, recommends a purpose-aware PQC/hybrid
-migration path, and blocks CI merges on policy-violating (deprecated/weak)
-cryptography.
+SIH 2026 · PS 26164 · Team **ctrl-Nix** (KIIT Bhubaneswar)
 
-## What this is (and isn't)
-- **Core product:** CLI scanner + GitHub Actions compliance gate.
-- **Reporting layer:** React dashboard visualizing scan results, CBOM, and
-  risk scores — engineer detail view and a decision-maker summary view.
-- **Scope for this build:** Python source-code scanning only. Binary/
-  container/library scanning is architecturally extensible but **not
-  implemented** in this version — don't imply otherwise in the demo.
-- **Risk scoring:** rule-based and explainable (see
-  `skills/cbom-quantum-risk/SKILL.md`), never a black-box AI score.
-- **Remediation text:** sourced from a fixed lookup table; an LLM may
-  rephrase it for readability but never invents the fix (see
-  `skills/remediation-copy/SKILL.md`).
+Scans code for weak / at-risk cryptography, builds a standardized **CBOM**
+(CycloneDX), scores each finding's quantum risk (Mosca's algorithm), recommends
+a fix, and blocks merges that introduce dangerous crypto via a CI/CD gate.
 
-## Quick start
+> We scan code **structurally (AST, not regex)** to build a standardized CBOM,
+> score every finding for quantum risk, and block merges that introduce
+> dangerous crypto — mapped to DPDP and NIST guidance.
+
+## Repository layout
+
+```
+scanner/            # AST-based crypto detection engine   (Shashank)
+backend/            # FastAPI app + database layer         (backend trio)
+  └── db/           #   schema, models, crud, tests        (Ronak)
+frontend/           # React reporting dashboard            (Karan, Satyam)
+skills/             # Agent skill definitions
+.github/workflows/  # CI/CD compliance gate
+ARCHITECTURE.md     # stack + data model + API routes (survival-gate item)
+.clinerules         # agent rules (survival-gate item)
+AGENTS_AND_SKILLS.md
+```
+
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the data model and API routes.
+
+## Quick start (database layer)
+
 ```bash
-git clone <repo-url>
-cd ecdat
-cp .env.example .env   # fill in your DB connection string, no secrets committed
-docker compose up
+docker compose up -d          # Postgres, schema applied automatically
+pip install -r requirements.txt
+python -m pytest              # DB tests (run on SQLite, no Docker needed)
 ```
 
-## Running a scan
-```bash
-python -m scanner.cli scan ./path-to-target-repo
-```
-
-## Project structure
-```
-ecdat/
-├── scanner/              # AST-based crypto detection engine
-├── backend/               # FastAPI app
-├── frontend/               # React dashboard
-├── skills/                  # Agent skill definitions
-│   ├── ast-crypto-scanning/
-│   ├── cbom-quantum-risk/
-│   ├── remediation-copy/
-│   ├── secure-api-development/
-│   └── ci-cd-gate/
-├── .github/workflows/     # CI/CD compliance gate
-├── ARCHITECTURE.md
-├── .clinerules
-└── AGENTS_AND_SKILLS.md
-```
-
-## Team
-| Person | Owns |
-|---|---|
-| Shashank | Scanner core & CI/CD gate |
-| Ronak | Database |
-| Shreyanshi | Remediation copy (+ shared backend) |
-| Shreyanshi, Ronak, Shashank | Backend (shared) |
-| Karan | Packaging |
-| Karan & Satyam | Frontend |
-| Maitreyi | Report format, CBOM/risk-score co-design, presentation |
-
-## Status
-Working build — see `ARCHITECTURE.md` for current scope and
-`AGENTS_AND_SKILLS.md` for agent/skill documentation.
-
-## Demo line (say this, verbatim, on stage)
-> "We scan code structurally — not with regex — to build a standardized
-> CBOM, score every finding for quantum risk using a documented, explainable
-> formula, and block merges that introduce dangerous crypto, mapped to DPDP
-> and NIST guidance."
-
-Never say "zero false positives." Say "minimized through AST
-context-awareness."
+Details for the DB lane: **[backend/db/README.md](backend/db/README.md)**.

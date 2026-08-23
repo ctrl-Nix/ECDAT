@@ -1,9 +1,10 @@
-# Secrets — never commit
+# Environment variables
 .env
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
 .venv/
 venv/
 
@@ -12,9 +13,10 @@ node_modules/
 dist/
 build/
 
-# OS / editor
+# IDE / OS files
 .DS_Store
 .vscode/
+.idea/
 
 # Docker
 *.log
