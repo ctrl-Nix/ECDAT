@@ -1,4 +1,4 @@
-"""Make the cbom_db package importable when running pytest from db/."""
+"""Put the repo root on sys.path so `import backend.db...` works under pytest."""
 import os
 import sys
 
