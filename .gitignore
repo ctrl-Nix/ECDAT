@@ -1,13 +1,22 @@
 # Environment variables
 .env
 
-# Python bytecode / caches
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
 .pytest_cache/
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+dist/
+build/
 
 # IDE / OS files
 .DS_Store
 .vscode/
 .idea/
+
+# Docker
+*.log

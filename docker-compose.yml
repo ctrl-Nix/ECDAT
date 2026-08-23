@@ -1,34 +1,63 @@
-# Postgres-only compose for the DATABASE lane (Ronak).
+# ============================================================
+# docker-compose.yml — repo root
+# Owner: Karan (Packaging), db service merged from Ronak's design
+# ============================================================
+# Matches README.md quick start:
+#     cp .env.example .env
+#     docker compose up
 #
-# Day-1 goal: "run Postgres in Docker with one command instead of installing
-# it locally." From the repo root:
+# schema.sql is applied automatically the first time the data volume
+# is empty (Postgres runs everything in /docker-entrypoint-initdb.d
+# on init). To re-apply after editing schema.sql, reset the volume:
+#     docker compose down -v && docker compose up -d
 #
-#     docker compose up -d
-#
-# schema.sql is applied automatically the first time the data volume is empty
-# (Postgres runs everything in /docker-entrypoint-initdb.d on init). To re-apply
-# after editing schema.sql, reset the volume:  docker compose down -v && up -d.
-#
-# This is intentionally just the database. Karan folds it into the root
-# docker-compose.yml (backend + db + frontend) later in the week.
+# NOTE: confirm with Ronak that schema.sql actually lives at
+# backend/db/schema.sql — adjust the mount path below if it's
+# somewhere else once her Day 2 work is pushed.
+# ============================================================
+
 services:
+
   db:
     image: postgres:16-alpine
     container_name: cbom-postgres
+    restart: unless-stopped
+    env_file: .env
     environment:
-      POSTGRES_USER: cbom
-      POSTGRES_PASSWORD: cbom
-      POSTGRES_DB: cbom
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
-      - cbom_pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cbom -d cbom"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ---- Uncomment on Day 4, once frontend/ has a working build step ----
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "5173:5173"
+  #   depends_on:
+  #     - backend
+
 volumes:
-  cbom_pgdata:
+  pgdata:
