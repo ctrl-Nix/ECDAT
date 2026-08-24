@@ -50,10 +50,22 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     OLLAMA_MODEL: str = "llama3"
 
+    # CORS & Network Configuration
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "*",
+    ]
+
     # Scanner & Execution Settings
     SCAN_TIMEOUT_SECONDS: int = 120
     LLM_TIMEOUT_SECONDS: float = 6.0
+    DEFAULT_PAGE_SIZE: int = 50
+    MAX_PAGE_SIZE: int = 500
 
 
 settings = Settings()
+
 

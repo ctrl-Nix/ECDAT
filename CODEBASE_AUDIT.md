@@ -857,3 +857,12 @@ Result:
   - LLM timeouts enforced to prevent thread exhaustion / DoS.
   - Deterministic cryptographic rules strictly preserved upstream of LLM rephrasing.
 
+### Update: 2026-08-24 — Production Configuration & Security Hardening
+- **Lead / Owner**: Shreyanshi / Team
+- **Files Modified / Implemented**:
+  1. `api/core/config.py`: Added CORS allowed origins (`CORS_ORIGINS`), pagination limits (`DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`), and environment-driven `pydantic-settings` BaseSettings.
+  2. `api/core/security.py`: Built timing-safe `X-API-Key` header validation dependency (`get_api_key`) using `secrets.compare_digest` with dev-mode bypass support.
+  3. `api/main.py`: Attached `CORSMiddleware` using `settings.CORS_ORIGINS` to enable seamless integration with the React dashboard.
+- **Verification Status**: 21 passed in `pytest` (100% pass rate).
+
+
