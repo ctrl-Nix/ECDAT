@@ -14,6 +14,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from api.core.config import settings
+from api.core.security import get_api_key
 from api.database import get_session
 from api.models import RemediationOut, RemediationRequest
 from db import crud
@@ -316,6 +317,7 @@ async def get_remediation_for_finding(
     provider: Optional[str] = Query(None, description="Optional provider ('gemini', 'openai', 'grok', 'groq', 'nvidia', 'ollama')"),
     model: Optional[str] = Query(None, description="Optional model identifier override"),
     db: Session = Depends(get_session),
+    _key: str = Depends(get_api_key),
 ):
     """
     Get remediation recommendation for a specific finding in a scan.
@@ -349,7 +351,10 @@ async def get_remediation_for_finding(
 
 
 @router.post("/remediation/generate", response_model=RemediationOut)
-async def generate_remediation_direct(req: RemediationRequest):
+async def generate_remediation_direct(
+    req: RemediationRequest,
+    _key: str = Depends(get_api_key),
+):
     """
     Ad-hoc direct endpoint to generate remediation for any algorithm & snippet.
     """

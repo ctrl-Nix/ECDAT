@@ -19,7 +19,7 @@ from scanner import python_engine
 from scanner import multilang_engine
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RULES_DIR = REPO_ROOT / "rules"
+RULES_DIR = Path(__file__).resolve().parent / "rules"
 
 
 def scan(target: Path) -> list:

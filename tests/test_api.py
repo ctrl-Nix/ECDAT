@@ -17,7 +17,7 @@ def test_read_root():
 
 def test_get_remediation_for_finding_endpoint():
     """Test GET /scans/{scan_id}/remediation/{finding_id} route returns remediation dict."""
-    response = client.get("/scans/1/remediation/42")
+    response = client.get("/scans/1/remediation/42", headers={"X-API-Key": "ecdat-secret-key-2026"})
     assert response.status_code == 200
     data = response.json()
     assert "suggestion" in data
