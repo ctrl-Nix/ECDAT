@@ -60,3 +60,23 @@ class ScanWithFindings(BaseModel):
     scan: ScanOut
     findings: list[FindingOut] = []
     summary: RiskSummary | None = None
+
+
+class RemediationOut(BaseModel):
+    finding_id: int | str | None = None
+    suggestion: str
+    source: str  # 'llm' or 'table'
+    provider: str | None = None
+    model: str | None = None
+    fallback_used: bool = False
+    severity: str | None = None
+
+
+class RemediationRequest(BaseModel):
+    algorithm: str
+    file: str = "unknown"
+    line: int = 1
+    api_key: str | None = None
+    provider: str | None = None
+    model: str | None = None
+

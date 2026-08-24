@@ -258,3 +258,10 @@ def get_risk_summary(session: Session, scan_id: int) -> dict[str, int]:
         total += int(n)
     counts["total"] = total
     return counts
+
+
+def get_finding(session: Session, finding_id: int) -> Finding | None:
+    """Fetch a single finding by primary key ID."""
+    stmt = select(Finding).where(Finding.id == finding_id)
+    return session.scalars(stmt).first()
+

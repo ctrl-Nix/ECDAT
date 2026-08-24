@@ -28,8 +28,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from db.models import Base
 
-# psycopg (v3) driver. Matches `psycopg[binary]` in requirements.txt.
-DEFAULT_DATABASE_URL = "postgresql+psycopg://cbom:cbom@localhost:5432/cbom"
+from api.core.config import settings
+
+# Default SQLite for local / test environments if Postgres is not configured
+DEFAULT_DATABASE_URL = getattr(settings, "DATABASE_URL", "sqlite:///./ecdat.db")
 
 
 @event.listens_for(Engine, "connect")
@@ -46,6 +48,7 @@ def _enforce_sqlite_foreign_keys(dbapi_connection, _record) -> None:
 
 def get_database_url() -> str:
     return os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+
 
 
 def _make_engine(url: str) -> Engine:
@@ -79,13 +82,26 @@ def get_sessionmaker() -> "sessionmaker[Session]":
     return _SessionLocal
 
 
+_db_initialized = False
+
+
 def get_session() -> Iterator[Session]:
     """FastAPI dependency: yields a session and always closes it."""
+    global _db_initialized
+    engine = get_engine()
+    if not _db_initialized and str(engine.url).startswith("sqlite"):
+        try:
+            init_db(engine)
+        except Exception:
+            pass
+        _db_initialized = True
+
     session = get_sessionmaker()()
     try:
         yield session
     finally:
         session.close()
+
 
 
 def init_db(target_engine: Engine | None = None) -> None:

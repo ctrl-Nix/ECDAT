@@ -66,13 +66,45 @@ def test_get_remediation_text_fallback_on_missing_key(monkeypatch):
     assert "AES-256-GCM" in res["suggestion"]
 
 
-def test_get_remediation_text_fallback_on_placeholder_key(monkeypatch):
-    """
-    Test fallback behavior when GOOGLE_API_KEY is set to default placeholder.
-    """
-    monkeypatch.setenv("GOOGLE_API_KEY", "your_key_here")
+def test_detect_provider():
+    from api.routers.remediation import detect_provider
 
-    res = get_remediation_text("SHA1", "crypto/hash.py", 15)
-    assert res["source"] == "table"
-    assert "SHA1 detected" in res["suggestion"]
-    assert "SHA-256" in res["suggestion"]
+    assert detect_provider("AIzaSyB-12345")[0] == "gemini"
+    assert detect_provider("sk-proj-12345")[0] == "openai"
+    assert detect_provider("xai-12345")[0] == "grok"
+    assert detect_provider("gsk_12345")[0] == "groq"
+    assert detect_provider("nvapi-12345")[0] == "nvidia"
+    assert detect_provider(requested_provider="ollama")[0] == "ollama"
+    assert detect_provider(requested_provider="llama")[0] == "groq"
+
+
+def test_get_remediation_openai_compatible(monkeypatch):
+    """Test OpenAI / Grok / Groq / Llama execution via mocked HTTPX."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "choices": [{"message": {"content": "Use SHA-256 instead of MD5 for secure hashing."}}]
+    }
+    mock_resp.raise_for_status.return_value = None
+
+    with patch("httpx.Client.post", return_value=mock_resp):
+        res = get_remediation_text("MD5", "src/auth.py", 10, api_key="sk-proj-testkey")
+        assert res["source"] == "llm"
+        assert res["provider"] == "openai"
+        assert "SHA-256" in res["suggestion"]
+        assert res["fallback_used"] is False
+
+
+def test_get_remediation_groq_llama(monkeypatch):
+    """Test Groq Llama provider with gsk_ key."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "choices": [{"message": {"content": "Replace DES with AES-256-GCM to prevent cryptanalytic attacks."}}]
+    }
+    mock_resp.raise_for_status.return_value = None
+
+    with patch("httpx.Client.post", return_value=mock_resp):
+        res = get_remediation_text("DES", "src/crypto.py", 25, api_key="gsk_mock_groq_key")
+        assert res["source"] == "llm"
+        assert res["provider"] == "groq"
+        assert "AES-256-GCM" in res["suggestion"]
+

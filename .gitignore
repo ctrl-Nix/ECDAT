@@ -18,9 +18,9 @@ build/
 .vscode/
 .idea/
 
-# Docker
-*.log
-__pycache__/
-*.pyc
-*.pyo
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
 

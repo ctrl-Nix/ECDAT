@@ -1,13 +1,23 @@
 """
 Remediation Service Module for ECDAT.
 
-Combines rule-based remediation lookups with LLM rephrasing capability,
-providing robust fallback to static lookup tables.
+Provides multi-provider LLM rephrasing (Gemini, OpenAI, Grok/xAI, Groq/Llama, NVIDIA Build/Llama, Ollama)
+backed by deterministic rule-based cryptographic remediation tables and automatic provider auto-detection.
 """
 
-from fastapi import APIRouter, HTTPException
+from __future__ import annotations
 
-from remediation_table import get_remediation
+import os
+from typing import Any, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+import httpx
+from sqlalchemy.orm import Session
+
+from api.core.config import settings
+from api.database import get_session
+from api.models import RemediationOut, RemediationRequest
+from db import crud
+from remediation_table import get_criticality, get_remediation
 
 router = APIRouter()
 
@@ -35,62 +45,321 @@ def build_prompt(algorithm: str, file: str, line: int, base_fix: str) -> str:
     )
 
 
-def get_remediation_text(algorithm: str, file: str, line: int, api_key: str = None) -> dict:
+def detect_provider(api_key: Optional[str] = None, requested_provider: Optional[str] = None) -> tuple[str, str | None]:
+    """
+    Detect the LLM provider and effective API key based on explicit parameter,
+    key format/prefix heuristics, or environment variables.
+    """
+    if requested_provider:
+        prov = requested_provider.lower().strip()
+        if prov in {"gemini", "google"}:
+            return "gemini", api_key or settings.GOOGLE_API_KEY or settings.GEMINI_API_KEY or os.getenv("GOOGLE_API_KEY")
+        elif prov in {"openai", "chatgpt"}:
+            return "openai", api_key or settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
+        elif prov in {"grok", "xai"}:
+            return "grok", api_key or settings.GROK_API_KEY or settings.XAI_API_KEY or os.getenv("GROK_API_KEY")
+        elif prov in {"groq", "llama", "groq-llama"}:
+            return "groq", api_key or settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY")
+        elif prov in {"nvidia", "nvidia-nim", "nvidia-llama"}:
+            return "nvidia", api_key or settings.NVIDIA_BUILD_API_KEY or os.getenv("NVIDIA_BUILD_API_KEY")
+        elif prov in {"ollama", "local"}:
+            return "ollama", None
+
+    # Key prefix heuristic
+    if api_key:
+        clean_key = api_key.strip()
+        if clean_key.startswith("AIza"):
+            return "gemini", clean_key
+        elif clean_key.startswith("xai-"):
+            return "grok", clean_key
+        elif clean_key.startswith("gsk_"):
+            return "groq", clean_key
+        elif clean_key.startswith("nvapi-"):
+            return "nvidia", clean_key
+        elif clean_key.startswith("sk-") or clean_key.startswith("sk-proj-"):
+            return "openai", clean_key
+
+    # Environment fallback check in priority order
+    google_key = settings.GOOGLE_API_KEY or settings.GEMINI_API_KEY or os.getenv("GOOGLE_API_KEY")
+    if google_key and google_key != "your_key_here":
+        return "gemini", google_key
+
+    openai_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
+    if openai_key and openai_key != "your_key_here":
+        return "openai", openai_key
+
+    grok_key = settings.GROK_API_KEY or settings.XAI_API_KEY or os.getenv("GROK_API_KEY")
+    if grok_key and grok_key != "your_key_here":
+        return "grok", grok_key
+
+    groq_key = settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY")
+    if groq_key and groq_key != "your_key_here":
+        return "groq", groq_key
+
+    nvidia_key = settings.NVIDIA_BUILD_API_KEY or os.getenv("NVIDIA_BUILD_API_KEY")
+    if nvidia_key and nvidia_key != "your_key_here":
+        return "nvidia", nvidia_key
+
+    return "gemini", api_key
+
+
+def _call_gemini(prompt: str, api_key: str, model_name: str = "gemini-1.5-flash") -> str:
+    """Invoke Google Gemini API."""
+    import google.generativeai as genai
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(model_name)
+    response = model.generate_content(prompt)
+    if response and hasattr(response, "text") and response.text:
+        return response.text.strip()
+    raise ValueError("Empty response from Gemini")
+
+
+def _call_openai_compatible(
+    prompt: str,
+    api_key: str | None,
+    base_url: str,
+    model_name: str,
+    timeout: float = 6.0,
+) -> str:
+    """Invoke any OpenAI-compatible completions API (OpenAI, Grok, Groq, NVIDIA, Ollama)."""
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    payload = {
+        "model": model_name,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a senior security engineer providing precise, 1-2 sentence cryptographic remediation advice.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 150,
+    }
+
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    with httpx.Client(timeout=timeout) as client:
+        resp = client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        choices = data.get("choices", [])
+        if choices and "message" in choices[0] and "content" in choices[0]["message"]:
+            return choices[0]["message"]["content"].strip()
+    raise ValueError("Empty or invalid response from OpenAI-compatible endpoint")
+
+
+def get_remediation_text(
+    algorithm: str,
+    file: str = "unknown",
+    line: int = 1,
+    api_key: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> dict[str, Any]:
     """
     Fetch remediation recommendation text for a given finding.
-    Calls LLM if API key is valid, falling back to rule-based table on any failure.
-
-    Args:
-        algorithm: Canonical algorithm string.
-        file: File path string.
-        line: Line number integer.
-        api_key: Optional explicit API key string.
-
-    Returns:
-        Dict with 'suggestion' and 'source' ('llm' or 'table') keys.
+    Supports Gemini, OpenAI, Grok, Groq (Llama), NVIDIA (Llama), and Ollama.
+    Falls back reliably to rule-based table on any failure, rate limit, or timeout.
     """
     rem = get_remediation(algorithm)
     base_fix = rem["fix"]
     reason = rem["reason"]
-    fallback = {
+    criticality = get_criticality(file)
+
+    fallback: dict[str, Any] = {
         "suggestion": f"{algorithm} detected. Fix: {base_fix}. {reason}",
         "source": "table",
+        "provider": "table",
+        "model": "rule_based_table",
+        "fallback_used": True,
+        "severity": criticality,
     }
 
+    effective_provider, effective_key = detect_provider(api_key, provider)
+
+    if not effective_key and effective_provider != "ollama":
+        return fallback
+
+    if effective_key in {"your_key_here", "change_me_locally", ""}:
+        return fallback
+
+    prompt = build_prompt(algorithm, file, line, base_fix)
+    timeout = getattr(settings, "LLM_TIMEOUT_SECONDS", 6.0)
+
     try:
-        import os
+        if effective_provider == "gemini":
+            selected_model = model or getattr(settings, "GEMINI_MODEL", "gemini-1.5-flash")
+            text = _call_gemini(prompt, effective_key, selected_model)
 
-        import google.generativeai as genai
+            return {
+                "suggestion": text,
+                "source": "llm",
+                "provider": "gemini",
+                "model": selected_model,
+                "fallback_used": False,
+                "severity": criticality,
+            }
 
-        key = api_key or os.getenv("GOOGLE_API_KEY")
-        if not key or key == "your_key_here":
-            raise ValueError("No valid API key provided")
+        elif effective_provider == "openai":
+            selected_model = model or settings.OPENAI_MODEL
+            text = _call_openai_compatible(
+                prompt,
+                effective_key,
+                settings.OPENAI_BASE_URL,
+                selected_model,
+                timeout,
+            )
+            return {
+                "suggestion": text,
+                "source": "llm",
+                "provider": "openai",
+                "model": selected_model,
+                "fallback_used": False,
+                "severity": criticality,
+            }
 
-        genai.configure(api_key=key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        prompt = build_prompt(algorithm, file, line, base_fix)
-        response = model.generate_content(prompt)
+        elif effective_provider == "grok":
+            selected_model = model or settings.GROK_MODEL
+            text = _call_openai_compatible(
+                prompt,
+                effective_key,
+                settings.GROK_BASE_URL,
+                selected_model,
+                timeout,
+            )
+            return {
+                "suggestion": text,
+                "source": "llm",
+                "provider": "grok",
+                "model": selected_model,
+                "fallback_used": False,
+                "severity": criticality,
+            }
 
-        if response and hasattr(response, "text") and response.text:
-            return {"suggestion": response.text.strip(), "source": "llm"}
-        raise ValueError("Empty or invalid response from LLM")
+        elif effective_provider == "groq":
+            selected_model = model or settings.GROQ_MODEL
+            text = _call_openai_compatible(
+                prompt,
+                effective_key,
+                settings.GROQ_BASE_URL,
+                selected_model,
+                timeout,
+            )
+            return {
+                "suggestion": text,
+                "source": "llm",
+                "provider": "groq",
+                "model": selected_model,
+                "fallback_used": False,
+                "severity": criticality,
+            }
+
+        elif effective_provider == "nvidia":
+            selected_model = model or settings.NVIDIA_MODEL
+            text = _call_openai_compatible(
+                prompt,
+                effective_key,
+                settings.NVIDIA_BASE_URL,
+                selected_model,
+                timeout,
+            )
+            return {
+                "suggestion": text,
+                "source": "llm",
+                "provider": "nvidia",
+                "model": selected_model,
+                "fallback_used": False,
+                "severity": criticality,
+            }
+
+        elif effective_provider == "ollama":
+            selected_model = model or settings.OLLAMA_MODEL
+            text = _call_openai_compatible(
+                prompt,
+                None,
+                settings.OLLAMA_BASE_URL,
+                selected_model,
+                timeout,
+            )
+            return {
+                "suggestion": text,
+                "source": "llm",
+                "provider": "ollama",
+                "model": selected_model,
+                "fallback_used": False,
+                "severity": criticality,
+            }
+
+        return fallback
+
     except Exception:
+        # Fall back gracefully on any network error, auth failure, timeout, or rate limit
         return fallback
 
 
 @router.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "supported_providers": ["gemini", "openai", "grok", "groq", "nvidia", "ollama"],
+    }
 
 
-@router.get("/{scan_id}/remediation/{finding_id}")
-async def get_remediation_for_finding(scan_id: int, finding_id: int):
-    fake_finding = {"algorithm": "MD5", "file": "auth.py", "line": 42}
+@router.get("/{scan_id}/remediation/{finding_id}", response_model=RemediationOut)
+async def get_remediation_for_finding(
+    scan_id: int,
+    finding_id: int,
+    api_key: Optional[str] = Query(None, description="Optional LLM API Key (Gemini, OpenAI, Grok, Groq, NVIDIA)"),
+    provider: Optional[str] = Query(None, description="Optional provider ('gemini', 'openai', 'grok', 'groq', 'nvidia', 'ollama')"),
+    model: Optional[str] = Query(None, description="Optional model identifier override"),
+    db: Session = Depends(get_session),
+):
+    """
+    Get remediation recommendation for a specific finding in a scan.
+    Queries the database finding row if available, otherwise falls back to defaults.
+    """
+    finding_row = crud.get_finding(db, finding_id)
+    if finding_row:
+        algorithm = finding_row.algorithm
+        file_path = finding_row.file
+        line_no = finding_row.line
+        severity = finding_row.risk_tier or finding_row.criticality
+    else:
+        # Fallback finding mock for direct testing
+        algorithm = "MD5"
+        file_path = "auth.py"
+        line_no = 42
+        severity = "HIGH"
+
     result = get_remediation_text(
-        algorithm=fake_finding["algorithm"],
-        file=fake_finding["file"],
-        line=fake_finding["line"],
+        algorithm=algorithm,
+        file=file_path,
+        line=line_no,
+        api_key=api_key,
+        provider=provider,
+        model=model,
     )
-    if not result:
-        raise HTTPException(status_code=404, detail="No remediation available")
+    result["finding_id"] = finding_id
+    if severity and ("severity" not in result or not result["severity"]):
+        result["severity"] = severity
     return result
+
+
+@router.post("/remediation/generate", response_model=RemediationOut)
+async def generate_remediation_direct(req: RemediationRequest):
+    """
+    Ad-hoc direct endpoint to generate remediation for any algorithm & snippet.
+    """
+    result = get_remediation_text(
+        algorithm=req.algorithm,
+        file=req.file,
+        line=req.line,
+        api_key=req.api_key,
+        provider=req.provider,
+        model=req.model,
+    )
+    return result
+
