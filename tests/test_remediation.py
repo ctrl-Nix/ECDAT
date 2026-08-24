@@ -4,7 +4,7 @@ Unit tests for build_prompt, get_remediation_text, and LLM fallback behavior.
 
 from unittest.mock import MagicMock, patch
 import pytest
-from remediation import build_prompt, get_remediation_text
+from api.routers.remediation import build_prompt, get_remediation_text
 
 
 def test_build_prompt():

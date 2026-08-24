@@ -26,7 +26,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from backend.db.models import Base
+from db.models import Base
 
 # psycopg (v3) driver. Matches `psycopg[binary]` in requirements.txt.
 DEFAULT_DATABASE_URL = "postgresql+psycopg://cbom:cbom@localhost:5432/cbom"

@@ -3,7 +3,7 @@ Unit tests for FastAPI main application routes.
 """
 
 from fastapi.testclient import TestClient
-from main import app
+from api.main import app
 
 client = TestClient(app)
 
@@ -12,7 +12,7 @@ def test_read_root():
     """Test GET / returns expected message and status code 200."""
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "ECDAT backend running"}
+    assert response.json() == {"status": "ok", "version": "1.0.0"}
 
 
 def test_get_remediation_for_finding_endpoint():

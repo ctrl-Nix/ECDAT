@@ -1,7 +1,13 @@
-# DATABASE lane dependencies (Ronak).
+tree-sitter==0.21.3
+tree-sitter-languages==1.10.2
+PyYAML>=6.0
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+python-multipart>=0.0.9
 SQLAlchemy>=2.0,<2.1
-psycopg[binary]>=3.1        # Postgres driver used by DATABASE_URL (postgresql+psycopg://)
-python-dotenv>=1.0          # load .env in local dev
-
-# Dev/test only:
+psycopg[binary]>=3.1
+python-dotenv>=1.0
 pytest>=8.0
+httpx>=0.27.0

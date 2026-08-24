@@ -58,8 +58,8 @@ def main() -> int:
     # Import after DATABASE_URL is set so the lazy engine picks it up.
     from sqlalchemy.orm import Session
 
-    from backend.db import crud
-    from backend.db.database import get_engine, init_db
+    from db import crud
+    from api.database import get_engine, init_db
 
     engine = get_engine()
     init_db(engine)  # idempotent

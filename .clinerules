@@ -1,11 +1,11 @@
 # Agent Constitution — ECDAT (PS 26164)
-# Every AI agent (Cline/Roo Code) working on this repo must follow these rules
-# without exception. If a task conflicts with a rule, stop and flag the human —
-# do not silently work around it.
+# Cline reads this file automatically from the workspace root.
+# Every AI agent working on this repo must follow these rules.
 
 ## Non-negotiable rules
 
-1. Crypto detection MUST use Python's `ast` module. NEVER use regex for code scanning.
+1. Crypto detection uses Python's `ast` module for Python files and tree-sitter
+   for Java/JavaScript files. NEVER use regex for code scanning.
 2. CBOM output MUST be valid CycloneDX JSON. Never invent a custom report format.
 3. NEVER call an algorithm "vulnerable" without a documented reason (deprecated
    standard, insufficient key size, known break). Cite the reason in the finding.
@@ -19,10 +19,10 @@
    before merge — human-in-the-loop is mandatory and is a scored judging criterion.
 8. Commit continuously in small, reviewable chunks. NEVER produce a single
    end-of-day commit dump — this is explicitly penalized.
-9. Scope for this build: **source-code scanning ONLY (Python)**. Binary/container/
-   library scanning is out of scope — do not build it, do not imply it's built in
-   demo copy or UI text. Say "the architecture extends to binaries/containers" in
-   the pitch; never claim it's implemented.
+9. Scope for this build: **source-code scanning for Python, Java, JavaScript**.
+   Binary/container/library scanning is out of scope — do not build it, do not
+   imply it's built in demo copy or UI text. Say "the architecture extends to
+   binaries/containers" in the pitch; never claim it's implemented.
 10. Do not claim "zero false positives" anywhere in code comments, UI text, or
     docs. Use "false positives minimized through AST context-awareness" instead.
 11. The quantum-risk score MUST be a documented, rule-based formula (migration
@@ -48,24 +48,49 @@
     and **business criticality** (CRITICAL/HIGH/MEDIUM, from the `criticality`
     column — see ARCHITECTURE.md). A finding missing any of the three is not
     considered classification-complete.
+18. The project uses a strict directory structure (see ARCHITECTURE.md). NEVER
+    create files at the repository root unless explicitly allowed. All code lives
+    in `api/`, `scanner/`, `db/`, `dashboard/`, or `tests/`.
+19. The backend is FastAPI with SQLAlchemy 2.0. NEVER use Flask, Django, or raw
+    SQL strings in route handlers. Always use Pydantic for validation.
+20. The frontend is React 18 with Vite. NEVER use Create React App or Next.js.
+    Use Recharts for charts, not custom div-based charts.
 
 ## Tech stack (do not deviate without human approval)
 
-- Scanner: Python 3.11+, `ast` module only
-- Backend: FastAPI + PostgreSQL
-- Frontend: React
+- Scanner: Python 3.11+, `ast` (Python) + tree-sitter 0.21.3 (Java/JS)
+- Backend: FastAPI + SQLAlchemy 2.0 + PostgreSQL
+- Frontend: React 18 + Vite + TailwindCSS + Recharts
 - CI/CD: GitHub Actions
 - Packaging: Docker / Docker Compose
 - Report format: CycloneDX JSON (CBOM)
 - Remediation copy: rule-based lookup table as the source of truth; LLM only
-  rephrases it, never generates the recommendation from scratch (see
-  `skills/remediation-copy/SKILL.md`)
+  rephrases it, never generates the recommendation from scratch
+
+## Directory structure (read ARCHITECTURE.md before touching files)
+
+```
+ecdat/
+├── api/              # FastAPI backend ONLY
+├── scanner/          # Scanner engines ONLY
+├── db/               # Database schema, models, CRUD ONLY
+├── dashboard/        # React frontend ONLY
+├── tests/            # All tests consolidated here
+├── skills/           # AI agent skill files
+├── docs/             # Documentation
+├── .clinerules       # This file
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+└── README.md
+```
 
 ## Before touching any file
 
 - Read `ARCHITECTURE.md` and the relevant `skills/*/SKILL.md` first.
 - If a task isn't covered by an existing skill, flag it to the human rather than
   improvising a new pattern silently.
+- If moving a file, update ALL imports that reference it. Do not leave broken imports.
 
 ## Definition of done for any task
 
@@ -73,3 +98,4 @@
 - Unit test exists and passes (plus a negative test if it's a detection rule)
 - No secrets in diff
 - Commit message is specific (not "update files" or "fixes")
+- Import paths are correct after any file moves

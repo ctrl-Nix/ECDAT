@@ -9,8 +9,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from backend.db import crud
-from backend.db.models import Base, Finding
+from db import crud
+from db.models import Base, Finding
 
 
 @pytest.fixture()

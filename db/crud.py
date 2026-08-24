@@ -27,7 +27,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import (
+from db.models import (
     CRITICALITIES,
     RISK_TIERS,
     SCAN_STATUSES,

@@ -5,9 +5,11 @@ Combines rule-based remediation lookups with LLM rephrasing capability,
 providing robust fallback to static lookup tables.
 """
 
-import os
-import google.generativeai as genai
+from fastapi import APIRouter, HTTPException
+
 from remediation_table import get_remediation
+
+router = APIRouter()
 
 
 def build_prompt(algorithm: str, file: str, line: int, base_fix: str) -> str:
@@ -56,6 +58,10 @@ def get_remediation_text(algorithm: str, file: str, line: int, api_key: str = No
     }
 
     try:
+        import os
+
+        import google.generativeai as genai
+
         key = api_key or os.getenv("GOOGLE_API_KEY")
         if not key or key == "your_key_here":
             raise ValueError("No valid API key provided")
@@ -67,7 +73,24 @@ def get_remediation_text(algorithm: str, file: str, line: int, api_key: str = No
 
         if response and hasattr(response, "text") and response.text:
             return {"suggestion": response.text.strip(), "source": "llm"}
-        else:
-            raise ValueError("Empty or invalid response from LLM")
+        raise ValueError("Empty or invalid response from LLM")
     except Exception:
         return fallback
+
+
+@router.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@router.get("/{scan_id}/remediation/{finding_id}")
+async def get_remediation_for_finding(scan_id: int, finding_id: int):
+    fake_finding = {"algorithm": "MD5", "file": "auth.py", "line": 42}
+    result = get_remediation_text(
+        algorithm=fake_finding["algorithm"],
+        file=fake_finding["file"],
+        line=fake_finding["line"],
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="No remediation available")
+    return result
