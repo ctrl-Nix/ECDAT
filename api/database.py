@@ -58,6 +58,9 @@ def _make_engine(url: str) -> Engine:
         connect_args["check_same_thread"] = False
     else:
         kwargs["pool_pre_ping"] = True
+        if "postgresql" in url and "sslmode=" not in url:
+            url += "?" if "?" not in url else "&"
+            url += "sslmode=require"
     return create_engine(url, connect_args=connect_args, **kwargs)
 
 
