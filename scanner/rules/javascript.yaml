@@ -1,0 +1,46 @@
+language: javascript
+rules:
+  - id: js-md5
+    match_object: crypto
+    match_method: createHash
+    match_arg_contains: md5
+    expected_module: crypto
+    algorithm: MD5
+    primitive: hash
+    weak_by_default: true
+
+  - id: js-sha1
+    match_object: crypto
+    match_method: createHash
+    match_arg_contains: sha1
+    expected_module: crypto
+    algorithm: SHA-1
+    primitive: hash
+    weak_by_default: true
+
+  - id: js-sha256
+    match_object: crypto
+    match_method: createHash
+    match_arg_contains: sha256
+    expected_module: crypto
+    algorithm: SHA-256
+    primitive: hash
+    weak_by_default: false
+
+  - id: js-cipheriv-des
+    match_object: crypto
+    match_method: createCipheriv
+    match_arg_contains: des
+    expected_module: crypto
+    algorithm: DES
+    primitive: encrypt
+    weak_by_default: true
+
+  - id: js-cipheriv-aes
+    match_object: crypto
+    match_method: createCipheriv
+    match_arg_contains: aes-256
+    expected_module: crypto
+    algorithm: AES-256
+    primitive: encrypt
+    weak_by_default: false

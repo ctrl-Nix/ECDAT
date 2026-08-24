@@ -1,0 +1,55 @@
+language: java
+rules:
+  - id: java-md5
+    match_object: MessageDigest
+    match_method: getInstance
+    match_arg_contains: MD5
+    expected_import: java.security.MessageDigest
+    algorithm: MD5
+    primitive: hash
+    weak_by_default: true
+
+  - id: java-sha1
+    match_object: MessageDigest
+    match_method: getInstance
+    match_arg_contains: SHA-1
+    expected_import: java.security.MessageDigest
+    algorithm: SHA-1
+    primitive: hash
+    weak_by_default: true
+
+  - id: java-sha256
+    match_object: MessageDigest
+    match_method: getInstance
+    match_arg_contains: SHA-256
+    expected_import: java.security.MessageDigest
+    algorithm: SHA-256
+    primitive: hash
+    weak_by_default: false
+
+  - id: java-des-cipher
+    match_object: Cipher
+    match_method: getInstance
+    match_arg_contains: DES
+    expected_import: javax.crypto.Cipher
+    algorithm: DES
+    primitive: encrypt
+    weak_by_default: true
+
+  - id: java-aes-cipher
+    match_object: Cipher
+    match_method: getInstance
+    match_arg_contains: AES
+    expected_import: javax.crypto.Cipher
+    algorithm: AES
+    primitive: encrypt
+    weak_by_default: false
+
+  - id: java-rsa-keygen
+    match_object: KeyPairGenerator
+    match_method: getInstance
+    match_arg_contains: RSA
+    expected_import: java.security.KeyPairGenerator
+    algorithm: RSA
+    primitive: asymmetric-keygen
+    weak_by_default: false
