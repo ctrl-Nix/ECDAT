@@ -874,6 +874,12 @@ Result:
 **Auditor**: Antigravity Assistant
 **Target**: `api/routers/remediation.py` and `scanner/cli.py`
 
+### Update: 2026-08-25 — Docker Packaging Fixed (Python Version Pin)
+- **Lead / Owner**: Karan
+- **Files Modified**:
+  1. `Dockerfile`: pinned base image to `python:3.11-slim` (was `3.13-slim`, which breaks the build — `tree-sitter-languages==1.10.2` has no Python 3.13 wheel). This fix was diagnosed on Day 3 but never actually pushed until now.
+- **Verification Status**: `docker compose up db backend` — db healthy, backend starts clean, Uvicorn listening on :8000. Confirmed live with a GET request returning `{"status":"ok","version":"1.0.0"}` with full security headers (HSTS, CSP, X-Frame-Options) present.
+
 ### Findings & Actions Taken:
 1. **Remediation Router Security (`api/routers/remediation.py`)**:
    - **Issue**: The endpoints `/{scan_id}/remediation/{finding_id}` and `/remediation/generate` were inadvertently exposed without the required `X-API-Key` header authentication.
