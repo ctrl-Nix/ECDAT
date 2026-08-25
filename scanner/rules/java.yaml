@@ -1,55 +1,85 @@
-language: java
+language: "java"
 rules:
-  - id: java-md5
-    match_object: MessageDigest
-    match_method: getInstance
-    match_arg_contains: MD5
-    expected_import: java.security.MessageDigest
-    algorithm: MD5
-    primitive: hash
+  # Hashes
+  - match_object: "MessageDigest"
+    match_method: "getInstance"
+    match_arg_contains: "MD5"
+    algorithm: "MD5"
+    primitive: "hash"
     weak_by_default: true
-
-  - id: java-sha1
-    match_object: MessageDigest
-    match_method: getInstance
-    match_arg_contains: SHA-1
-    expected_import: java.security.MessageDigest
-    algorithm: SHA-1
-    primitive: hash
+    expected_import: "java.security.MessageDigest"
+  
+  - match_object: "MessageDigest"
+    match_method: "getInstance"
+    match_arg_contains: "SHA-1"
+    algorithm: "SHA-1"
+    primitive: "hash"
     weak_by_default: true
-
-  - id: java-sha256
-    match_object: MessageDigest
-    match_method: getInstance
-    match_arg_contains: SHA-256
-    expected_import: java.security.MessageDigest
-    algorithm: SHA-256
-    primitive: hash
+    expected_import: "java.security.MessageDigest"
+    
+  - match_object: "MessageDigest"
+    match_method: "getInstance"
+    match_arg_contains: "SHA-256"
+    algorithm: "SHA-256"
+    primitive: "hash"
     weak_by_default: false
+    expected_import: "java.security.MessageDigest"
 
-  - id: java-des-cipher
-    match_object: Cipher
-    match_method: getInstance
-    match_arg_contains: DES
-    expected_import: javax.crypto.Cipher
-    algorithm: DES
-    primitive: encrypt
+  # Ciphers
+  - match_object: "Cipher"
+    match_method: "getInstance"
+    match_arg_contains: "DES"
+    algorithm: "DES"
+    primitive: "block-cipher"
     weak_by_default: true
+    expected_import: "javax.crypto.Cipher"
 
-  - id: java-aes-cipher
-    match_object: Cipher
-    match_method: getInstance
-    match_arg_contains: AES
-    expected_import: javax.crypto.Cipher
-    algorithm: AES
-    primitive: encrypt
+  - match_object: "Cipher"
+    match_method: "getInstance"
+    match_arg_contains: "AES"
+    algorithm: "AES"
+    primitive: "block-cipher"
     weak_by_default: false
+    expected_import: "javax.crypto.Cipher"
 
-  - id: java-rsa-keygen
-    match_object: KeyPairGenerator
-    match_method: getInstance
-    match_arg_contains: RSA
-    expected_import: java.security.KeyPairGenerator
-    algorithm: RSA
-    primitive: asymmetric-keygen
+  - match_object: "Cipher"
+    match_method: "getInstance"
+    match_arg_contains: "RC4"
+    algorithm: "RC4"
+    primitive: "stream-cipher"
+    weak_by_default: true
+    expected_import: "javax.crypto.Cipher"
+
+  - match_object: "Cipher"
+    match_method: "getInstance"
+    match_arg_contains: "RSA"
+    algorithm: "RSA"
+    primitive: "pke"
     weak_by_default: false
+    expected_import: "javax.crypto.Cipher"
+
+  # Signatures
+  - match_object: "Signature"
+    match_method: "getInstance"
+    match_arg_contains: "DSA"
+    algorithm: "DSA"
+    primitive: "signature"
+    weak_by_default: false
+    expected_import: "java.security.Signature"
+
+  # Key Generators
+  - match_object: "KeyPairGenerator"
+    match_method: "getInstance"
+    match_arg_contains: "RSA"
+    algorithm: "RSA"
+    primitive: "pke"
+    weak_by_default: false
+    expected_import: "java.security.KeyPairGenerator"
+
+  - match_object: "KeyPairGenerator"
+    match_method: "getInstance"
+    match_arg_contains: "EC"
+    algorithm: "ECC"
+    primitive: "signature"
+    weak_by_default: false
+    expected_import: "java.security.KeyPairGenerator"

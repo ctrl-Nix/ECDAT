@@ -1,46 +1,85 @@
-language: javascript
+language: "javascript"
 rules:
-  - id: js-md5
-    match_object: crypto
-    match_method: createHash
-    match_arg_contains: md5
-    expected_module: crypto
-    algorithm: MD5
-    primitive: hash
+  # Hashes
+  - match_object: "crypto"
+    match_method: "createHash"
+    match_arg_contains: "md5"
+    algorithm: "MD5"
+    primitive: "hash"
     weak_by_default: true
-
-  - id: js-sha1
-    match_object: crypto
-    match_method: createHash
-    match_arg_contains: sha1
-    expected_module: crypto
-    algorithm: SHA-1
-    primitive: hash
+    expected_module: "crypto"
+  
+  - match_object: "crypto"
+    match_method: "createHash"
+    match_arg_contains: "sha1"
+    algorithm: "SHA-1"
+    primitive: "hash"
     weak_by_default: true
-
-  - id: js-sha256
-    match_object: crypto
-    match_method: createHash
-    match_arg_contains: sha256
-    expected_module: crypto
-    algorithm: SHA-256
-    primitive: hash
+    expected_module: "crypto"
+    
+  - match_object: "crypto"
+    match_method: "createHash"
+    match_arg_contains: "sha256"
+    algorithm: "SHA-256"
+    primitive: "hash"
     weak_by_default: false
+    expected_module: "crypto"
 
-  - id: js-cipheriv-des
-    match_object: crypto
-    match_method: createCipheriv
-    match_arg_contains: des
-    expected_module: crypto
-    algorithm: DES
-    primitive: encrypt
+  # Ciphers
+  - match_object: "crypto"
+    match_method: "createCipheriv"
+    match_arg_contains: "des"
+    algorithm: "DES"
+    primitive: "block-cipher"
     weak_by_default: true
+    expected_module: "crypto"
 
-  - id: js-cipheriv-aes
-    match_object: crypto
-    match_method: createCipheriv
-    match_arg_contains: aes-256
-    expected_module: crypto
-    algorithm: AES-256
-    primitive: encrypt
+  - match_object: "crypto"
+    match_method: "createCipheriv"
+    match_arg_contains: "aes"
+    algorithm: "AES"
+    primitive: "block-cipher"
     weak_by_default: false
+    expected_module: "crypto"
+
+  - match_object: "crypto"
+    match_method: "createCipheriv"
+    match_arg_contains: "rc4"
+    algorithm: "RC4"
+    primitive: "stream-cipher"
+    weak_by_default: true
+    expected_module: "crypto"
+
+  # Key Generators (Asymmetric)
+  - match_object: "crypto"
+    match_method: "generateKeyPairSync"
+    match_arg_contains: "rsa"
+    algorithm: "RSA"
+    primitive: "pke"
+    weak_by_default: false
+    expected_module: "crypto"
+
+  - match_object: "crypto"
+    match_method: "generateKeyPairSync"
+    match_arg_contains: "ec"
+    algorithm: "ECC"
+    primitive: "signature"
+    weak_by_default: false
+    expected_module: "crypto"
+
+  - match_object: "crypto"
+    match_method: "generateKeyPairSync"
+    match_arg_contains: "dsa"
+    algorithm: "DSA"
+    primitive: "signature"
+    weak_by_default: false
+    expected_module: "crypto"
+
+  # Signatures
+  - match_object: "crypto"
+    match_method: "createSign"
+    match_arg_contains: "rsa"
+    algorithm: "RSA"
+    primitive: "signature"
+    weak_by_default: false
+    expected_module: "crypto"
