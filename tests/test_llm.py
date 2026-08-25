@@ -7,9 +7,8 @@ Loads GOOGLE_API_KEY from .env file without hardcoding keys in source code.
 
 import os
 import sys
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
-
 
 def main():
     # Load environment variables from .env
@@ -22,14 +21,11 @@ def main():
         print("Please add your valid Gemini API key to .env file.")
         sys.exit(1)
 
-    # Configure google-generativeai client
-    genai.configure(api_key=api_key)
-
-    # Initialize Gemini 1.5 Flash model
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    # Configure google-genai client
+    client = genai.Client(api_key=api_key)
 
     print("Sending prompt 'say hello' to Gemini 1.5 Flash...")
-    response = model.generate_content("say hello")
+    response = client.models.generate_content(model="gemini-1.5-flash", contents="say hello")
 
     print("\nGemini Response:")
     print(response.text)

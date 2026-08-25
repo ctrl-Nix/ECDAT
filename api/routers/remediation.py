@@ -106,11 +106,10 @@ def detect_provider(api_key: Optional[str] = None, requested_provider: Optional[
 
 def _call_gemini(prompt: str, api_key: str, model_name: str = "gemini-1.5-flash") -> str:
     """Invoke Google Gemini API."""
-    import google.generativeai as genai
+    from google import genai
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(model_name)
-    response = model.generate_content(prompt)
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(model=model_name, contents=prompt)
     if response and hasattr(response, "text") and response.text:
         return response.text.strip()
     raise ValueError("Empty response from Gemini")

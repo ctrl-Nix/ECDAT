@@ -26,10 +26,10 @@ def test_get_remediation_text_success(monkeypatch):
     mock_response = MagicMock()
     mock_response.text = "MD5 is cryptographically broken for hashing. Recommended fix: SHA-256 or BLAKE2."
 
-    with patch("google.generativeai.GenerativeModel") as mock_model_cls:
-        mock_model_instance = MagicMock()
-        mock_model_instance.generate_content.return_value = mock_response
-        mock_model_cls.return_value = mock_model_instance
+    with patch("google.genai.Client") as mock_client_cls:
+        mock_client_instance = MagicMock()
+        mock_client_instance.models.generate_content.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
 
         res = get_remediation_text("MD5", "src/auth.py", 10)
         assert res["source"] == "llm"
@@ -43,10 +43,10 @@ def test_get_remediation_text_fallback_on_invalid_key(monkeypatch):
     """
     monkeypatch.setenv("GOOGLE_API_KEY", "INVALID_API_KEY_12345")
 
-    with patch("google.generativeai.GenerativeModel") as mock_model_cls:
-        mock_model_instance = MagicMock()
-        mock_model_instance.generate_content.side_effect = Exception("400 API key not valid.")
-        mock_model_cls.return_value = mock_model_instance
+    with patch("google.genai.Client") as mock_client_cls:
+        mock_client_instance = MagicMock()
+        mock_client_instance.models.generate_content.side_effect = Exception("400 API key not valid.")
+        mock_client_cls.return_value = mock_client_instance
 
         res = get_remediation_text("MD5", "src/auth.py", 10)
         assert res["source"] == "table"
