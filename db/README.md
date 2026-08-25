@@ -29,7 +29,7 @@ From the repo root, one command:
 docker compose up -d
 ```
 
-`backend/db/schema.sql` is applied automatically on first start. To re-apply
+`db/schema.sql` is applied automatically on first start. To re-apply
 after editing it, reset the volume:
 
 ```bash
@@ -43,33 +43,45 @@ pip install -r requirements.txt
 python -m pytest
 ```
 
-## Data model (matches ARCHITECTURE.md)
+## Data model
+
+The `findings` table stores the **full pipeline output** — every scanner
+evidence field plus the risk-engine interpretation — so nothing is dropped
+between scan and dashboard (closes CODEBASE_AUDIT.md §3.2 / §4).
 
 | table | columns |
 |-------|---------|
 | `repositories` | `id`, `name`, `url` |
 | `scans` | `id`, `repo_id→repositories`, `started_at`, `status` |
-| `findings` | `id`, `scan_id→scans`, `file`, `line`, `algorithm`, `key_size`, `confidence`, `risk_tier`, `risk_reason`, `criticality` |
+| `findings` — scanner evidence | `id`, `scan_id→scans`, `file`, `line`, `algorithm`, `matched_call`, `library`, `primitive`, `language`, `weak_by_default`, `key_size`, `confidence`, `detection_method` |
+| `findings` — risk interpretation | `risk_tier`, `risk_reason`, `criticality`, `quantum_vulnerable`, `classical_broken`, `recommended_replacement`, `recommendation_type`, `created_at` |
 
 - `scans.status`: `pending | running | completed | failed`
 - `findings.risk_tier`: `LOW | MEDIUM | HIGH | CRITICAL` (nullable until scored)
 - `findings.criticality`: `MEDIUM | HIGH | CRITICAL` (business criticality, per PS)
+- `findings.recommendation_type`: `classical | hybrid | post-quantum` (nullable)
+- `quantum_vulnerable` / `classical_broken` are the **two independent risk axes**
+  the pitch centres on — now persisted, so the dashboard can render both.
+- CHECK constraints enforce the enum values above (match the values used in code).
 - Deleting a repo or scan cascades to its children.
-- **Day-4 indexes:** `idx_findings_scan_id`, `idx_findings_severity` (on `risk_tier`).
+- **Indexes:** `idx_findings_scan_id`, `idx_findings_severity` (on `risk_tier`), `idx_scans_repo_id`.
 
 ## The finding contract
 
-`save_finding()` / `save_findings()` follow the ARCHITECTURE.md shape and also
-accept common aliases so small scanner-output variations don't break a write:
+`save_finding()` / `save_findings()` store the full scanner + risk-engine shape
+and accept common aliases so small scanner-output variations don't break a write:
 
 ```jsonc
-// scanner (Shashank) produces:
-{ "file": "hash.py", "line": 42, "algorithm": "MD5",
-  "key_size": null, "confidence": "high" }
+// scanner (scanner/finding.py) produces:
+{ "file": "hash.py", "line": 42, "matched_call": "hashlib.md5",
+  "library": "hashlib", "algorithm": "MD5", "primitive": "hash",
+  "language": "python", "weak_by_default": true, "confidence": "high",
+  "key_size": null, "detection_method": "static_analysis" }
 
-// the CBOM/quantum-risk step (Maitreyi/Shashank) adds:
-{ "risk_tier": "CRITICAL", "risk_reason": "MD5 is broken…",
-  "criticality": "HIGH" }
+// risk_engine.score_finding() enriches with:
+{ "risk_tier": "CRITICAL", "risk_reason": "MD5 is broken…", "criticality": "HIGH",
+  "quantum_vulnerable": false, "classical_broken": true,
+  "recommended_replacement": "SHA-256", "recommendation_type": "classical" }
 ```
 
 Accepted aliases: `file_path`/`filePath`→`file`, `keyLength`→`key_size`,

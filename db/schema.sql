@@ -3,15 +3,14 @@
 -- Canonical database schema (PostgreSQL)
 --
 -- Owner: Ronak (DATABASE lane).
--- This schema is the one documented in ARCHITECTURE.md and is the single source
--- of truth for the DB. It is applied automatically when the Postgres container
--- first starts (mounted into /docker-entrypoint-initdb.d by docker-compose.yml).
--- The SQLAlchemy models in backend/db/models.py mirror it exactly.
+-- Single source of truth for the DB. Applied automatically when the Postgres
+-- container first starts (mounted into /docker-entrypoint-initdb.d by
+-- docker-compose.yml). The SQLAlchemy models in db/models.py mirror it exactly.
 --
--- Classification model (per PS 26164 wording): findings are classified by type,
--- lifetime and business criticality, and risk-scored via Mosca's algorithm.
---   risk_tier / risk_reason -> quantum-risk score (see skills/cbom-quantum-risk)
---   criticality             -> business criticality (CRITICAL/HIGH/MEDIUM)
+-- The `findings` table stores the FULL pipeline output so nothing is dropped
+-- between scan and dashboard (see CODEBASE_AUDIT.md §3.2 / §4):
+--   * scanner evidence   -> scanner/finding.py
+--   * risk interpretation -> api/services/risk_engine.py
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -29,33 +28,53 @@ CREATE TABLE IF NOT EXISTS repositories (
 CREATE TABLE IF NOT EXISTS scans (
     id         SERIAL PRIMARY KEY,
     repo_id    INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
-    started_at TIMESTAMP DEFAULT now(),
-    status     TEXT DEFAULT 'pending'   -- pending | running | completed | failed
+    started_at TIMESTAMPTZ DEFAULT now(),
+    status     TEXT DEFAULT 'pending'
+               CHECK (status IN ('pending', 'running', 'completed', 'failed'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_scans_repo_id ON scans(repo_id);
 
 -- ---------------------------------------------------------------------------
 -- findings: one row per cryptographic artefact discovered in a scan.
--- Column names follow the scanner finding contract: file, line, algorithm,
--- key_size, confidence. Risk columns are populated by the CBOM/quantum-risk
--- step.
+-- Columns mirror the scanner Finding contract plus the risk-engine output.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS findings (
-    id          SERIAL PRIMARY KEY,
-    scan_id     INTEGER REFERENCES scans(id) ON DELETE CASCADE,
-    file        TEXT NOT NULL,
-    line        INTEGER NOT NULL,
-    algorithm   TEXT NOT NULL,
-    key_size    INTEGER,
-    confidence  TEXT DEFAULT 'high',
+    id                      SERIAL PRIMARY KEY,
+    scan_id                 INTEGER REFERENCES scans(id) ON DELETE CASCADE,
 
-    -- Risk fields (see skills/cbom-quantum-risk/SKILL.md)
-    risk_tier   TEXT,            -- LOW / MEDIUM / HIGH / CRITICAL
-    risk_reason TEXT,            -- one-sentence, factor-based explanation
+    -- Scanner evidence (scanner/finding.py)
+    file                    TEXT NOT NULL,
+    line                    INTEGER NOT NULL,
+    algorithm               TEXT NOT NULL,
+    matched_call            TEXT,
+    library                 TEXT,
+    primitive               TEXT,               -- hash | cipher | signature | ...
+    language                TEXT,               -- python | java | javascript
+    weak_by_default         BOOLEAN,
+    key_size                INTEGER,
+    confidence              TEXT DEFAULT 'high',        -- high | unverified
+    detection_method        TEXT DEFAULT 'static_analysis',
 
-    -- PS 26164 requires classification by type, lifetime and business
-    -- criticality. This column is reserved from Day 1 so no one has to touch
-    -- DB/API/frontend again later to add it.
-    criticality TEXT DEFAULT 'MEDIUM'   -- CRITICAL / HIGH / MEDIUM
+    -- Risk-engine interpretation (api/services/risk_engine.py)
+    risk_tier               TEXT,               -- LOW | MEDIUM | HIGH | CRITICAL
+    risk_reason             TEXT,
+    criticality             TEXT DEFAULT 'MEDIUM',      -- MEDIUM | HIGH | CRITICAL
+    quantum_vulnerable      BOOLEAN,
+    classical_broken        BOOLEAN,
+    recommended_replacement TEXT,
+    recommendation_type     TEXT,               -- classical | hybrid | post-quantum
+
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT findings_risk_tier_valid
+        CHECK (risk_tier IS NULL
+               OR risk_tier IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
+    CONSTRAINT findings_criticality_valid
+        CHECK (criticality IN ('MEDIUM', 'HIGH', 'CRITICAL')),
+    CONSTRAINT findings_recommendation_type_valid
+        CHECK (recommendation_type IS NULL
+               OR recommendation_type IN ('classical', 'hybrid', 'post-quantum'))
 );
 
 -- Day-4 indexes (owned by Ronak): the dashboard filters findings by scan and

@@ -26,14 +26,26 @@ class FindingOut(BaseModel):
 
     id: int
     scan_id: int | None = None
+    # Scanner evidence
     file: str
     line: int
     algorithm: str
+    matched_call: str | None = None
+    library: str | None = None
+    primitive: str | None = None
+    language: str | None = None
+    weak_by_default: bool | None = None
     key_size: int | None = None
     confidence: str
+    detection_method: str | None = None
+    # Risk-engine interpretation
     risk_tier: str | None = None
     risk_reason: str | None = None
     criticality: str
+    quantum_vulnerable: bool | None = None
+    classical_broken: bool | None = None
+    recommended_replacement: str | None = None
+    recommendation_type: str | None = None
 
 
 class ScanOut(BaseModel):

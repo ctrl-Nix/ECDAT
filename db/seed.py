@@ -2,10 +2,10 @@
 
 Usage (from repo root):
     # against Docker Postgres (default DATABASE_URL):
-    python -m backend.db.seed --findings 500
+    python -m db.seed --findings 500
 
     # against a throwaway SQLite file, no Docker needed:
-    python -m backend.db.seed --sqlite --findings 500
+    python -m db.seed --sqlite --findings 500
 
 Seeds one repo + one scan + N findings, then times the exact query the
 dashboard runs most: "findings for this scan, filtered by risk tier."

@@ -14,10 +14,13 @@ Primary entry points:
     get_findings_for_scan()     - findings for a scan, optional risk_tier filter
     get_risk_summary()          - risk-tier counts for the dashboard header
 
-The finding normalizer follows the ARCHITECTURE.md contract
-    {file, line, algorithm, key_size, confidence, risk_tier, risk_reason, criticality}
-but accepts common aliases (file_path/filePath, keyLength, severity->risk_tier)
-so small scanner-output variations don't break a scan write.
+The finding normalizer stores the full pipeline shape -- every scanner
+evidence field (file, line, algorithm, matched_call, library, primitive,
+language, weak_by_default, key_size, confidence, detection_method) plus the
+risk-engine output (risk_tier, risk_reason, criticality, quantum_vulnerable,
+classical_broken, recommended_replacement, recommendation_type) -- and accepts
+common aliases (file_path/filePath, keyLength, severity->risk_tier) so small
+scanner-output variations don't break a scan write.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from db.models import (
     CRITICALITIES,
+    RECOMMENDATION_TYPES,
     RISK_TIERS,
     SCAN_STATUSES,
     Finding,
@@ -38,6 +42,7 @@ from db.models import (
 
 # Maps every accepted incoming key (lower-cased, spaces stripped) to a column.
 _FINDING_KEY_ALIASES: dict[str, str] = {
+    # scanner evidence
     "file": "file",
     "filepath": "file",
     "file_path": "file",
@@ -47,11 +52,22 @@ _FINDING_KEY_ALIASES: dict[str, str] = {
     "lineno": "line",
     "algorithm": "algorithm",
     "algo": "algorithm",
+    "matched_call": "matched_call",
+    "matchedcall": "matched_call",
+    "library": "library",
+    "primitive": "primitive",
+    "language": "language",
+    "lang": "language",
+    "weak_by_default": "weak_by_default",
+    "weakbydefault": "weak_by_default",
     "key_size": "key_size",
     "keysize": "key_size",
     "keylength": "key_size",
     "key_length": "key_size",
     "confidence": "confidence",
+    "detection_method": "detection_method",
+    "detectionmethod": "detection_method",
+    # risk-engine interpretation
     "risk_tier": "risk_tier",
     "risktier": "risk_tier",
     "severity": "risk_tier",
@@ -60,7 +76,25 @@ _FINDING_KEY_ALIASES: dict[str, str] = {
     "riskreason": "risk_reason",
     "reason": "risk_reason",
     "criticality": "criticality",
+    "quantum_vulnerable": "quantum_vulnerable",
+    "quantumvulnerable": "quantum_vulnerable",
+    "classical_broken": "classical_broken",
+    "classicalbroken": "classical_broken",
+    "recommended_replacement": "recommended_replacement",
+    "recommendedreplacement": "recommended_replacement",
+    "replacement": "recommended_replacement",
+    "recommendation_type": "recommendation_type",
+    "recommendationtype": "recommendation_type",
 }
+
+# Columns that are free-text passthrough (kept as-is when present).
+_TEXT_PASSTHROUGH = (
+    "matched_call", "library", "primitive", "language", "risk_reason",
+    "recommended_replacement",
+)
+
+_TRUE_STRINGS = {"1", "true", "yes", "y", "t"}
+_FALSE_STRINGS = {"0", "false", "no", "n", "f"}
 
 
 def _coerce_int(value: Any) -> int | None:
@@ -72,8 +106,28 @@ def _coerce_int(value: Any) -> int | None:
         return None
 
 
+def _coerce_bool(value: Any) -> bool | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in _TRUE_STRINGS:
+        return True
+    if text in _FALSE_STRINGS:
+        return False
+    return None
+
+
 def normalize_finding(finding: dict[str, Any]) -> dict[str, Any]:
-    """Turn an arbitrary finding dict into validated Finding column kwargs."""
+    """Turn an arbitrary finding dict into validated Finding column kwargs.
+
+    Accepts the full pipeline shape (scanner evidence + risk-engine output)
+    plus common aliases, so nothing the scanner or risk engine produces is
+    dropped on write.
+    """
     cols: dict[str, Any] = {}
     for key, value in finding.items():
         target = _FINDING_KEY_ALIASES.get(str(key).lower().replace(" ", ""))
@@ -88,7 +142,19 @@ def normalize_finding(finding: dict[str, Any]) -> dict[str, Any]:
     cols["line"] = 0 if line is None else line          # column is NOT NULL
     cols["key_size"] = _coerce_int(cols.get("key_size"))
 
+    # Text passthrough columns: keep only truthy values (None otherwise).
+    for name in _TEXT_PASSTHROUGH:
+        val = cols.get(name)
+        cols[name] = str(val) if val not in (None, "") else None
+
     cols["confidence"] = str(cols.get("confidence") or "high").strip().lower()
+    cols["detection_method"] = (
+        str(cols.get("detection_method") or "static_analysis").strip()
+        or "static_analysis"
+    )
+    cols["weak_by_default"] = _coerce_bool(cols.get("weak_by_default"))
+    cols["quantum_vulnerable"] = _coerce_bool(cols.get("quantum_vulnerable"))
+    cols["classical_broken"] = _coerce_bool(cols.get("classical_broken"))
 
     tier = cols.get("risk_tier")
     if tier is None or str(tier).strip() == "":
@@ -99,6 +165,11 @@ def normalize_finding(finding: dict[str, Any]) -> dict[str, Any]:
 
     crit = str(cols.get("criticality") or "MEDIUM").strip().upper()
     cols["criticality"] = crit if crit in CRITICALITIES else "MEDIUM"
+
+    rtype = cols.get("recommendation_type")
+    if rtype is not None:
+        rtype = str(rtype).strip().lower()
+        cols["recommendation_type"] = rtype if rtype in RECOMMENDATION_TYPES else None
 
     return cols
 
