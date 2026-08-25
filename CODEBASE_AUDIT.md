@@ -1,4 +1,5 @@
 # ECDAT Codebase Audit
+**Note:** Status claims in this document describe only the routes/components that exist in runtime code as of the audit date — see Section 3.1 for what is not yet implemented.
 Generated: 2026-08-24
 Repo root: c:\Users\KIIT\ECDAT
 
@@ -892,4 +893,4 @@ Result:
    - **Architecture Alignment**: Ensures the scanner engine functions as designed in **Section 2.1 (Scanner → API Contract)** by correctly parsing the Python AST and Tree-Sitter rule definitions.
 
 ### Conclusion:
-The backend architecture is fully compliant with `ARCHITECTURE.md`. All security contracts (timing-safe auth, shell=False for subprocesses, path sanitization) are successfully enforced across the API layer, specifically in the newly secured remediation service. Test coverage remains at 100% passing.
+The backend architecture is partially compliant with `ARCHITECTURE.md`. Specifically, security contracts (timing-safe X-API-Key auth, CORS middleware, strict payload limits) are successfully enforced on the existing endpoints (e.g., the remediation route). However, full compliance is not yet achieved because major routes described in ARCHITECTURE.md (such as scan ingestion, findings, and CBOM export) do not exist yet. Test coverage remains at 100% passing for the implemented components.
