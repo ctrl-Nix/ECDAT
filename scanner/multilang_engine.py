@@ -18,8 +18,8 @@ Requires::
     pip install "tree-sitter==0.21.3" tree-sitter-languages pyyaml
 
 .. note::
-   The tree-sitter version pin matters. Newer core builds break the
-   pre-built grammar bindings that ``tree-sitter-languages`` ships.
+   Pinned to tree-sitter 0.21.3 + tree-sitter-languages for compatibility.
+   Requires Python 3.11 (see Dockerfile) -- tree-sitter-languages has no Python 3.12+ wheels.
 
 .. note:: PIPELINE FIX (finding_id)
    The shared ``Finding`` dataclass (scanner/finding.py) has no
@@ -55,6 +55,7 @@ from tree_sitter_languages import get_language, get_parser
 # Use the canonical Finding model shared by all engines.
 # This guarantees that Python-engine and multilang-engine output are
 # structurally identical and can be merged safely by ``scanner/cli.py``.
+from scanner.constants import SKIP_DIRS, _should_skip
 from scanner.finding import Finding
 
 __all__ = [
@@ -92,24 +93,39 @@ RULES_DIR_DEFAULT: Path = Path(__file__).resolve().parent / "rules"
 # The actual cryptographic knowledge lives entirely in ``rules/*.yaml``.
 _CALL_QUERIES: Dict[str, str] = {
     "java": """
-        (method_invocation
-          object: (identifier) @object
-          name: (identifier) @method
-          arguments: (argument_list) @args) @call
+        [
+          (method_invocation
+            object: (identifier) @object
+            name: (identifier) @method
+            arguments: (argument_list) @args)
+          (method_invocation
+            name: (identifier) @method
+            arguments: (argument_list) @args)
+        ] @call
     """,
     "javascript": """
-        (call_expression
-          function: (member_expression
-            object: (identifier) @object
-            property: (property_identifier) @method)
-          arguments: (arguments) @args) @call
+        [
+          (call_expression
+            function: (member_expression
+              object: (identifier) @object
+              property: (property_identifier) @method)
+            arguments: (arguments) @args)
+          (call_expression
+            function: (identifier) @method
+            arguments: (arguments) @args)
+        ] @call
     """,
     "typescript": """
-        (call_expression
-          function: (member_expression
-            object: (identifier) @object
-            property: (property_identifier) @method)
-          arguments: (arguments) @args) @call
+        [
+          (call_expression
+            function: (member_expression
+              object: (identifier) @object
+              property: (property_identifier) @method)
+            arguments: (arguments) @args)
+          (call_expression
+            function: (identifier) @method
+            arguments: (arguments) @args)
+        ] @call
     """,
 }
 
@@ -117,7 +133,13 @@ _CALL_QUERIES: Dict[str, str] = {
 # This is the direct equivalent of the alias-tracking the Python scanner
 # already does via ``ast.Import`` / ``ast.ImportFrom``.
 _IMPORT_QUERIES: Dict[str, str] = {
-    "java": "(import_declaration) @decl",
+    "java": """
+        [
+          (import_declaration) @decl
+          (import_declaration
+            (modifiers (static)) @static_decl)
+        ] @decl
+    """,
     "javascript": """
         [
           (variable_declarator
@@ -127,6 +149,11 @@ _IMPORT_QUERIES: Dict[str, str] = {
               arguments: (arguments (string) @modname)))
           (import_statement
             (import_clause (identifier) @varname)
+            (string) @modname)
+          (import_statement
+            (import_clause
+              (named_imports
+                (import_specifier (identifier) @varname)))
             (string) @modname)
         ] @decl
     """,
@@ -139,6 +166,11 @@ _IMPORT_QUERIES: Dict[str, str] = {
               arguments: (arguments (string) @modname)))
           (import_statement
             (import_clause (identifier) @varname)
+            (string) @modname)
+          (import_statement
+            (import_clause
+              (named_imports
+                (import_specifier (identifier) @varname)))
             (string) @modname)
         ] @decl
     """,
@@ -204,13 +236,17 @@ def load_rules(rules_dir: Path) -> Dict[str, List[dict]]:
 # Import / binding resolution
 # ---------------------------------------------------------------------------
 
-def _resolve_java_imports(tree, source: bytes) -> Dict[str, str]:
+def _resolve_java_imports(tree, source: bytes) -> tuple[Dict[str, str], Dict[str, str]]:
     """Map simple class name → fully-qualified import path.
+
+    Also returns static imports mapping method name → class name.
 
     Example::
 
         import java.security.MessageDigest;
-        #  => {"MessageDigest": "java.security.MessageDigest"}
+        import static java.security.MessageDigest.getInstance;
+        #  => imports: {"MessageDigest": "java.security.MessageDigest"}
+        #  => static_imports: {"getInstance": "MessageDigest"}
 
     Wildcard imports (``.*``) are intentionally ignored because they cannot
     be resolved to a specific class without classpath analysis.
@@ -218,65 +254,92 @@ def _resolve_java_imports(tree, source: bytes) -> Dict[str, str]:
     lang = _get_language("java")
     query = lang.query(_IMPORT_QUERIES["java"])
     imports: Dict[str, str] = {}
+    static_imports: Dict[str, str] = {}
 
     for _, captures in query.matches(tree.root_node):
-        decl_node = captures.get("decl")
-        if decl_node is None:
+        decl_nodes = captures.get("decl")
+        if not decl_nodes:
             continue
 
+        decl_node = decl_nodes[0]
         raw = source[decl_node.start_byte:decl_node.end_byte].decode("utf-8", "ignore")
-        # Strip leading "import" and trailing semicolon, then split on dots.
         stripped = raw.strip()
         if stripped.startswith("import"):
             stripped = stripped[len("import"):].strip()
-        if stripped.startswith("static"):
+        is_static = stripped.startswith("static")
+        if is_static:
             stripped = stripped[len("static"):].strip()
         stripped = stripped.rstrip(";").strip()
 
         if stripped.endswith(".*"):
             continue  # wildcard — cannot resolve to a specific class
 
-        simple_name = stripped.split(".")[-1]
-        imports[simple_name] = stripped
+        parts = stripped.split(".")
+        simple_name = parts[-1]
+        full_path = stripped
+        class_name = parts[-2] if len(parts) >= 2 else simple_name
 
-    return imports
+        if is_static:
+            # For static imports, map method name to class name
+            # e.g., "java.security.MessageDigest.getInstance" -> {"getInstance": "MessageDigest"}
+            static_imports[simple_name] = class_name
+            # Also add to imports so confidence check works
+            class_path = ".".join(parts[:-1])
+            imports[class_name] = class_path
+        else:
+            imports[simple_name] = full_path
+
+    return imports, static_imports
 
 
-def _resolve_js_bindings(tree, source: bytes) -> Dict[str, str]:
+def _resolve_js_bindings(tree, source: bytes) -> tuple[Dict[str, str], Dict[str, str]]:
     """Map local variable name → module specifier.
 
-    Handles both CommonJS::
+    Handles CommonJS, ES6 default imports, and ES6 named imports.
 
-        const crypto = require("crypto");
-
-    and ES modules::
-
-        import crypto from "crypto";
+    Returns:
+        bindings: Maps variable/function name → module name
+        static_imports: Maps imported function name → module name (for ES6 named imports)
     """
     lang = _get_language("javascript")
     query = lang.query(_IMPORT_QUERIES["javascript"])
     bindings: Dict[str, str] = {}
+    static_imports: Dict[str, str] = {}
 
     for _, captures in query.matches(tree.root_node):
-        var_node = captures.get("varname")
-        mod_node = captures.get("modname")
-        fn_node = captures.get("fn")
+        var_nodes = captures.get("varname")
+        mod_nodes = captures.get("modname")
+        fn_nodes = captures.get("fn")
 
-        if var_node is None or mod_node is None:
+        if not var_nodes or not mod_nodes:
             continue
+
+        var_node = var_nodes[0]
+        mod_node = mod_nodes[0]
+        fn_node = fn_nodes[0] if fn_nodes else None
+
+        varname = source[var_node.start_byte:var_node.end_byte].decode("utf-8", "ignore")
+        modname = _extract_string_text(mod_node, source)
+        if not modname:
+            continue
+        modname = modname.replace("node:", "")
 
         # For CommonJS, ensure the call is actually ``require()``.
         if fn_node is not None:
             fn_text = source[fn_node.start_byte:fn_node.end_byte].decode("utf-8", "ignore")
             if fn_text != "require":
                 continue
+            # CommonJS: const crypto = require("crypto")
+            bindings[varname] = modname
+        else:
+            # ES6 imports: import crypto from "crypto" or import { createHash } from "crypto"
+            # For default imports, varname is the alias (e.g., "crypto")
+            # For named imports, varname is the imported function (e.g., "createHash")
+            # Both map to the module name
+            bindings[varname] = modname
+            static_imports[varname] = modname
 
-        varname = source[var_node.start_byte:var_node.end_byte].decode("utf-8", "ignore")
-        modname = _extract_string_text(mod_node, source)
-        if modname:
-            bindings[varname] = modname.replace("node:", "")
-
-    return bindings
+    return bindings, static_imports
 
 
 # ---------------------------------------------------------------------------
@@ -388,9 +451,12 @@ def scan_file(path: Path, rules_by_lang: Dict[str, List[dict]]) -> List[Finding]
 
     # Resolve imports / require bindings so we can verify confidence.
     if lang_key == "java":
-        bindings = _resolve_java_imports(tree, source)
+        bindings, static_imports = _resolve_java_imports(tree, source)
+    elif lang_key in ("javascript", "typescript"):
+        bindings, static_imports = _resolve_js_bindings(tree, source)
     else:
         bindings = _resolve_js_bindings(tree, source)
+        static_imports = {}
 
     # Run the call-expression query.
     ts_lang = _get_language(ts_language)
@@ -405,17 +471,29 @@ def scan_file(path: Path, rules_by_lang: Dict[str, List[dict]]) -> List[Finding]
     findings: List[Finding] = []
 
     for _, captures in matches:
-        call_node = captures.get("call")
-        object_node = captures.get("object")
-        method_node = captures.get("method")
-        args_node = captures.get("args")
+        call_nodes = captures.get("call")
+        object_nodes = captures.get("object")
+        method_nodes = captures.get("method")
+        args_nodes = captures.get("args")
 
-        if not (call_node and object_node and method_node):
+        if not (call_nodes and method_nodes):
             continue
 
-        object_name = source[object_node.start_byte:object_node.end_byte].decode("utf-8", "ignore")
+        call_node = call_nodes[0]
+        method_node = method_nodes[0]
+        args_node = args_nodes[0] if args_nodes else None
+        object_node = object_nodes[0] if object_nodes else None
+
         method_name = source[method_node.start_byte:method_node.end_byte].decode("utf-8", "ignore")
         arg_text = _first_string_arg(args_node, source)
+
+        # For static calls, object_name is empty; try to resolve via static imports
+        object_name = ""
+        if object_node:
+            object_name = source[object_node.start_byte:object_node.end_byte].decode("utf-8", "ignore")
+        elif method_name in static_imports:
+            # Static import: use the class name from the import
+            object_name = static_imports[method_name]
 
         for rule in rules_by_lang[lang_key]:
             if rule.get("match_object") != object_name:
@@ -476,11 +554,13 @@ def scan_directory(target: Path, rules_by_lang: Dict[str, List[dict]]) -> List[F
     all_findings: List[Finding] = []
 
     if target.is_file():
-        all_findings.extend(scan_file(target, rules_by_lang))
+        if not _should_skip(target):
+            all_findings.extend(scan_file(target, rules_by_lang))
     elif target.is_dir():
         for ext in EXT_TO_LANG:
             for filepath in sorted(target.rglob(f"*{ext}")):
-                all_findings.extend(scan_file(filepath, rules_by_lang))
+                if not _should_skip(filepath):
+                    all_findings.extend(scan_file(filepath, rules_by_lang))
     else:
         logger.error("Target path does not exist: %s", target)
 

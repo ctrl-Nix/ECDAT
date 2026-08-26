@@ -2,6 +2,7 @@
 
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 
 
 class Settings(BaseSettings):
@@ -18,10 +19,24 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # Database Configuration
-    DATABASE_URL: str = "sqlite:///./ecdat.db"
+    # If POSTGRES_* are provided, DATABASE_URL is auto-constructed.
+    # If DATABASE_URL is explicitly set in .env, it takes precedence.
     POSTGRES_USER: Optional[str] = None
     POSTGRES_PASSWORD: Optional[str] = None
     POSTGRES_DB: Optional[str] = None
+    POSTGRES_HOST: str = "db"
+    POSTGRES_PORT: int = 5432
+    DATABASE_URL: Optional[str] = None
+
+    @model_validator(mode="after")
+    def construct_database_url(self) -> "Settings":
+        """Auto-construct DATABASE_URL from POSTGRES_* if not explicitly provided."""
+        if self.DATABASE_URL is None:
+            if all([self.POSTGRES_USER, self.POSTGRES_PASSWORD, self.POSTGRES_DB]):
+                self.DATABASE_URL = f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            else:
+                self.DATABASE_URL = "sqlite:///./ecdat.db"
+        return self
 
     # LLM API Keys & Configurations
     GOOGLE_API_KEY: Optional[str] = None

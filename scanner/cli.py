@@ -17,6 +17,7 @@ from pathlib import Path
 
 from scanner import python_engine
 from scanner import multilang_engine
+from scanner.constants import SKIP_DIRS, _should_skip
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RULES_DIR = Path(__file__).resolve().parent / "rules"

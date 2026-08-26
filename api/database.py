@@ -19,7 +19,6 @@ importing this package never requires the Postgres driver.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 
 from sqlalchemy import create_engine, event
@@ -29,9 +28,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from db.models import Base
 
 from api.core.config import settings
-
-# Default SQLite for local / test environments if Postgres is not configured
-DEFAULT_DATABASE_URL = getattr(settings, "DATABASE_URL", "sqlite:///./ecdat.db")
 
 
 @event.listens_for(Engine, "connect")
@@ -47,7 +43,7 @@ def _enforce_sqlite_foreign_keys(dbapi_connection, _record) -> None:
 
 
 def get_database_url() -> str:
-    return os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+    return settings.DATABASE_URL
 
 
 

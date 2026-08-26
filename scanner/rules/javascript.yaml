@@ -25,6 +25,22 @@ rules:
     weak_by_default: false
     expected_module: "crypto"
 
+  - match_object: "crypto"
+    match_method: "createHash"
+    match_arg_contains: "sha384"
+    algorithm: "SHA-384"
+    primitive: "hash"
+    weak_by_default: false
+    expected_module: "crypto"
+
+  - match_object: "crypto"
+    match_method: "createHash"
+    match_arg_contains: "sha512"
+    algorithm: "SHA-512"
+    primitive: "hash"
+    weak_by_default: false
+    expected_module: "crypto"
+
   # Ciphers
   - match_object: "crypto"
     match_method: "createCipheriv"

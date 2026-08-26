@@ -146,8 +146,13 @@ def scan_file(path: Path) -> list:
     return visitor.findings
 
 
+from scanner.constants import SKIP_DIRS, _should_skip
+
+
 def scan_directory(target: Path) -> list:
     all_findings = []
     for py_file in sorted(target.rglob("*.py")):
+        if _should_skip(py_file):
+            continue
         all_findings.extend(scan_file(py_file))
     return all_findings
