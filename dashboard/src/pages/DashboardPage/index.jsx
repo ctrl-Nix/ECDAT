@@ -1,204 +1,917 @@
-import { useMemo, useState } from 'react';
-import { Bell, ChevronDown, LayoutDashboard, Search, ShieldCheck, Download, Plus, Activity, Settings, ListFilter, FileText, FolderOpen, UserCircle, Lock } from 'lucide-react';
-import { BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { useState, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Activity, Bell, ChevronDown, ChevronRight, Download, FileText,
+  FolderOpen, LayoutDashboard, ListFilter, LoaderCircle, Lock,
+  Plus, Search, Settings, ShieldCheck, UserCircle, X, AlertTriangle,
+  CheckCircle2, Terminal, Code2, Zap, Clock, GitBranch, ExternalLink,
+  Cpu, RefreshCw, LogOut,
+} from 'lucide-react';
+import {
+  BarChart, Bar, PieChart, Pie, Cell,
+  ResponsiveContainer, Tooltip, CartesianGrid, XAxis, YAxis, Legend,
+} from 'recharts';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext.jsx';
+import {
+  mockFindings, mockScans, mockCbom, trendData, donutData,
+} from '../../mockData.js';
 
-const statCards = [
-  { title: 'Total Findings', value: '1,247', accent: 'text-white', trend: '+12.4%' },
-  { title: 'Critical Risk Count', value: '42', accent: 'text-red-400', trend: 'High priority' },
-  { title: 'Scans This Month', value: '18', accent: 'text-white', trend: '+3 new' },
-  { title: 'Compliance Score', value: '87%', accent: 'text-emerald-400', trend: 'On track' },
-];
+/* ─── helpers ─────────────────────────────────────────────────────────────── */
+const STATUS_STYLE = {
+  completed: 'badge-low',
+  running:   'badge-critical', // Actually running should be cyan. I'll make a badge-cyan class in css, but for now fallback to inline.
+  failed:    'badge-critical',
+};
 
-const donutData = [
-  { name: 'Critical', value: 42, color: '#ef4444' },
-  { name: 'High', value: 109, color: '#f59e0b' },
-  { name: 'Medium', value: 218, color: '#3b82f6' },
-  { name: 'Low', value: 878, color: '#10b981' },
-];
+const STATUS_ICON = {
+  completed: <CheckCircle2 className="h-3 w-3" />,
+  running:   <LoaderCircle className="h-3 w-3 animate-spin" />,
+  failed:    <AlertTriangle className="h-3 w-3" />,
+};
 
-const trendData = [
-  { day: 'Mon', findings: 38, critical: 12 },
-  { day: 'Tue', findings: 46, critical: 15 },
-  { day: 'Wed', findings: 52, critical: 18 },
-  { day: 'Thu', findings: 40, critical: 14 },
-  { day: 'Fri', findings: 64, critical: 22 },
-  { day: 'Sat', findings: 49, critical: 19 },
-  { day: 'Sun', findings: 58, critical: 25 },
-];
+function RiskBadge({ tier }) {
+  const badgeClass = `badge badge-${(tier || 'LOW').toLowerCase()}`;
+  return (
+    <span className={badgeClass}>
+      {tier}
+    </span>
+  );
+}
 
-const findings = [
-  { severity: 'CRITICAL', file: 'src/auth/legacy_login.py:42', algorithm: 'MD5', line: 42, confidence: 'Verified', risk: 'Critical', date: '2026-08-24' },
-  { severity: 'HIGH', file: 'src/utils/cert_gen.py:15', algorithm: 'RSA', line: 15, confidence: 'Probable', risk: 'High', date: '2026-08-23' },
-  { severity: 'MEDIUM', file: 'src/api/handlers.js:88', algorithm: 'SHA-1', line: 88, confidence: 'Unverified', risk: 'Medium', date: '2026-08-21' },
-  { severity: 'LOW', file: 'lib/encryption.c:112', algorithm: 'AES', line: 112, confidence: 'Verified', risk: 'Low', date: '2026-08-20' },
-];
+function ConfidenceDot({ level }) {
+  const bg = level === 'high' ? 'var(--green)' : level === 'medium' ? 'var(--medium)' : 'var(--t3)';
+  return <span className="inline-block h-2 w-2 rounded-full" style={{ background: bg }} />;
+}
 
-const sideItems = [
-  { label: 'Overview', icon: LayoutDashboard },
-  { label: 'Scan History', icon: Activity },
-  { label: 'Reports', icon: FileText },
-  { label: 'CBOM Library', icon: FolderOpen },
-  { label: 'Settings', icon: Settings },
-];
+/* ─── New Scan Modal ──────────────────────────────────────────────────────── */
+function NewScanModal({ onClose }) {
+  const [step, setStep] = useState('form'); // 'form' | 'scanning' | 'done'
+  const [url, setUrl] = useState('');
+  const [branch, setBranch] = useState('main');
+  const [progress, setProgress] = useState(0);
 
-export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState('Overview');
-
-  const total = useMemo(() => donutData.reduce((sum, item) => sum + item.value, 0), []);
+  const handleScan = async (e) => {
+    e.preventDefault();
+    if (!url.trim()) return;
+    setStep('scanning');
+    for (let i = 0; i <= 100; i += 5) {
+      await new Promise((r) => setTimeout(r, 80));
+      setProgress(i);
+    }
+    setStep('done');
+  };
 
   return (
-    <div className="min-h-screen bg-primary text-slate-100">
-      <header className="sticky top-0 z-40 border-b border-slate-800 bg-primary/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-blue/20 text-accent-blue">
-              <ShieldCheck className="h-5 w-5" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <motion.div
+        className="absolute inset-0 backdrop-blur-sm"
+        style={{ background: 'rgba(3, 7, 17, 0.85)' }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        className="relative z-10 w-full max-w-lg card-raised p-6 shadow-2xl"
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--t1)' }}>New Scan</h2>
+            <p className="text-sm" style={{ color: 'var(--t2)' }}>Scan a repository for cryptographic findings</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 transition-colors" style={{ color: 'var(--t3)' }} onMouseOver={e=>e.currentTarget.style.color='var(--t1)'} onMouseOut={e=>e.currentTarget.style.color='var(--t3)'}>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {step === 'form' && (
+          <form onSubmit={handleScan} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>Repository URL</label>
+              <input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="github.com/org/repository"
+                className="field"
+              />
             </div>
             <div>
-              <div className="text-lg font-semibold">ECDAT</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Dashboard</div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>Branch</label>
+              <input
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+                placeholder="main"
+                className="field"
+              />
+            </div>
+            <div className="flex gap-2">
+              {['Python', 'JavaScript', 'Java', 'Go', 'Rust', 'C/C++'].map((lang) => (
+                <button key={lang} type="button"
+                  className="rounded-md border px-2 py-1 text-xs transition-colors"
+                  style={{ borderColor: 'var(--border)', color: 'var(--t2)' }}
+                  onMouseOver={e=>{e.currentTarget.style.borderColor='var(--cyan)'; e.currentTarget.style.color='var(--cyan)'}}
+                  onMouseOut={e=>{e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.color='var(--t2)'}}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+            <div className="pt-2">
+              <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2 py-2.5">
+                <Terminal className="h-4 w-4" /> Start scan
+              </button>
+            </div>
+          </form>
+        )}
+
+        {step === 'scanning' && (
+          <div className="space-y-4">
+            <div className="terminal p-4">
+              <div style={{ color: 'var(--cyan)' }}>$ ecdat scan {url || 'github.com/enterprise/repo'}</div>
+              <div style={{ color: 'var(--t3)' }}>[INFO] Cloning repository...</div>
+              {progress > 20 && <div style={{ color: 'var(--t3)' }}>[INFO] Indexing source files...</div>}
+              {progress > 40 && <div style={{ color: 'var(--medium)' }}>[SCAN] Running AST analysis...</div>}
+              {progress > 60 && <div style={{ color: 'var(--medium)' }}>[SCAN] Scoring findings...</div>}
+              {progress > 80 && <div style={{ color: 'var(--cyan)' }}>[INFO] Generating CBOM...</div>}
+            </div>
+            <div>
+              <div className="mb-2 flex justify-between text-xs" style={{ color: 'var(--t2)' }}>
+                <span>Scanning...</span><span className="num">{progress}%</span>
+              </div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div className="space-y-4 text-center py-4">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full" style={{ background: 'var(--green-10)', color: 'var(--green)' }}>
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--t1)' }}>Scan complete</div>
+              <div className="text-sm mt-1 num" style={{ color: 'var(--t2)' }}>3 findings detected · 1 critical</div>
+            </div>
+            <button onClick={onClose} className="btn-primary w-full mt-4">
+              View results
+            </button>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
+/* ─── Finding detail panel ────────────────────────────────────────────────── */
+function FindingPanel({ finding, onClose }) {
+  if (!finding) return null;
+  return (
+    <motion.div
+      initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+      transition={{ type: 'spring', damping: 26, stiffness: 260 }}
+      className="fixed right-0 top-0 z-40 flex h-full w-full max-w-md flex-col border-l shadow-2xl"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface-r)' }}
+    >
+      <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--border)' }}>
+        <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>Finding Detail</div>
+        <button onClick={onClose} className="rounded-lg p-1.5 transition-colors" style={{ color: 'var(--t3)' }} onMouseOver={e=>e.currentTarget.style.color='var(--t1)'} onMouseOut={e=>e.currentTarget.style.color='var(--t3)'}>
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex items-start gap-3">
+          <RiskBadge tier={finding.risk_tier} />
+          {finding.quantum_vulnerable && (
+            <span className="badge badge-quantum">
+              <Zap className="h-3 w-3 mr-1" /> Quantum risk
+            </span>
+          )}
+        </div>
+
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--t3)' }}>Algorithm</div>
+          <div className="mono text-lg font-bold" style={{ color: 'var(--t1)' }}>{finding.algorithm}</div>
+        </div>
+
+        <div className="card p-4 space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--t2)' }}>File</span>
+            <span className="mono text-xs" style={{ color: 'var(--t1)' }}>{finding.file}</span>
+          </div>
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--t2)' }}>Line</span>
+            <span className="num" style={{ color: 'var(--t1)' }}>{finding.line}</span>
+          </div>
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--t2)' }}>Confidence</span>
+            <span className="flex items-center gap-1.5 capitalize" style={{ color: 'var(--t1)' }}>
+              <ConfidenceDot level={finding.confidence} /> {finding.confidence}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--t2)' }}>Classical broken</span>
+            <span style={{ color: finding.classical_broken ? 'var(--critical)' : 'var(--green)' }}>
+              {finding.classical_broken ? 'Yes' : 'No'}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span style={{ color: 'var(--t2)' }}>Quantum vulnerable</span>
+            <span style={{ color: finding.quantum_vulnerable ? 'var(--purple)' : 'var(--green)' }}>
+              {finding.quantum_vulnerable ? 'Yes' : 'No'}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--t3)' }}>Risk Analysis</div>
+          <div className="card p-4 text-sm leading-relaxed" style={{ color: 'var(--t2)' }}>
+            {finding.summary}
+          </div>
+        </div>
+
+        {finding.replacement && (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--t3)' }}>Recommended Replacement</div>
+            <div className="flex items-center gap-2 rounded-xl border px-4 py-3" style={{ borderColor: 'rgba(0,229,160,0.2)', background: 'var(--green-10)' }}>
+              <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: 'var(--green)' }} />
+              <span className="mono text-sm" style={{ color: 'var(--green)' }}>{finding.replacement}</span>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="border-t p-4 flex gap-3" style={{ borderColor: 'var(--border)' }}>
+        <button className="btn-ghost flex-1 py-2.5 text-center flex justify-center">Copy finding</button>
+        <button className="btn-primary flex-1 py-2.5 text-center flex justify-center">Get remediation</button>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─── Sidebar ────────────────────────────────────────────────────────────── */
+const NAV = [
+  { id: 'overview',    label: 'Overview',      icon: LayoutDashboard },
+  { id: 'findings',    label: 'Findings',       icon: AlertTriangle },
+  { id: 'scans',       label: 'Scan History',   icon: Activity },
+  { id: 'cbom',        label: 'CBOM Library',   icon: FolderOpen },
+  { id: 'reports',     label: 'Reports',        icon: FileText },
+  { id: 'settings',    label: 'Settings',       icon: Settings },
+];
+
+/* ─── Overview Tab ───────────────────────────────────────────────────────── */
+function OverviewTab({ onNewScan, onSelectFinding }) {
+  const total = donutData.reduce((s, d) => s + d.value, 0);
+
+  const CUSTOM_TOOLTIP = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="card-raised px-3 py-2 text-sm shadow-lg">
+        <div className="font-semibold" style={{ color: 'var(--t1)' }}>{payload[0].name}</div>
+        <div className="num" style={{ color: 'var(--t2)' }}>{payload[0].value} findings</div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Stat cards */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { title: 'Total Findings', value: mockFindings.length, sub: `${mockFindings.filter(f => f.risk_tier === 'CRITICAL').length} critical`, accent: 'var(--t1)', icon: AlertTriangle },
+          { title: 'Active Scans', value: mockScans.filter(s => s.status === 'running').length, sub: 'Running now', accent: 'var(--cyan)', icon: Activity },
+          { title: 'Repositories', value: mockScans.length, sub: 'Indexed', accent: 'var(--t1)', icon: Code2 },
+          { title: 'Compliance Score', value: '87%', sub: 'NIST PQC ready', accent: 'var(--green)', icon: ShieldCheck },
+        ].map((card, i) => (
+          <motion.div
+            key={card.title}
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.07 }}
+            className="card p-5"
+          >
+            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>
+              <span>{card.title}</span>
+              <card.icon className="h-4 w-4" />
+            </div>
+            <div className="mt-4 text-3xl font-black num" style={{ color: card.accent }}>{card.value}</div>
+            <div className="mt-1 text-xs num" style={{ color: 'var(--t2)' }}>{card.sub}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Charts row */}
+      <div className="grid gap-6 xl:grid-cols-[1fr_1.6fr]">
+        {/* Donut */}
+        <div className="card p-5">
+          <div className="mb-4 text-sm font-semibold" style={{ color: 'var(--t1)' }}>Risk distribution</div>
+          <div className="relative h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={donutData} dataKey="value" innerRadius={54} outerRadius={82} paddingAngle={3}>
+                  {donutData.map((entry) => <Cell key={entry.name} fill={entry.color} strokeWidth={0} />)}
+                </Pie>
+                <Tooltip content={<CUSTOM_TOOLTIP />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <div className="text-2xl font-black num" style={{ color: 'var(--t1)' }}>{total}</div>
+              <div className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--t3)' }}>findings</div>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {donutData.map((d) => (
+              <div key={d.name} className="flex items-center gap-2 text-xs" style={{ color: 'var(--t2)' }}>
+                <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: d.color }} />
+                <span className="num">{d.name} — {d.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bar chart */}
+        <div className="card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>Finding trends</div>
+            <div className="flex gap-1">
+              {['7d', '30d', 'All'].map((f) => (
+                <button key={f}
+                  className="rounded-full px-2.5 py-1 text-xs font-medium transition-colors"
+                  style={{
+                    background: f === '7d' ? 'var(--cyan-10)' : 'transparent',
+                    color: f === '7d' ? 'var(--cyan)' : 'var(--t2)',
+                  }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trendData} barGap={4}>
+                <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="day" stroke="var(--border-s)" tick={{ fontSize: 11, fill: 'var(--t2)', fontFamily: 'JetBrains Mono' }} />
+                <YAxis stroke="var(--border-s)" tick={{ fontSize: 11, fill: 'var(--t2)', fontFamily: 'JetBrains Mono' }} />
+                <Tooltip content={<CUSTOM_TOOLTIP />} />
+                <Bar dataKey="findings" fill="var(--cyan)" radius={[4, 4, 0, 0]} name="Total" fillOpacity={0.85} />
+                <Bar dataKey="critical" fill="var(--critical)" radius={[4, 4, 0, 0]} name="Critical" fillOpacity={0.85} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent findings */}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>Recent findings</div>
+          <button className="text-xs" style={{ color: 'var(--cyan)' }}>View all →</button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Risk</th>
+                <th>Algorithm</th>
+                <th>File</th>
+                <th>Quantum</th>
+                <th>Date</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {mockFindings.slice(0, 5).map((f) => (
+                <tr key={f.id} onClick={() => onSelectFinding(f)} className="cursor-pointer">
+                  <td><RiskBadge tier={f.risk_tier} /></td>
+                  <td className="mono font-semibold" style={{ color: 'var(--t1)' }}>{f.algorithm}</td>
+                  <td className="mono" style={{ color: 'var(--t2)' }}>{f.file}:{f.line}</td>
+                  <td>
+                    {f.quantum_vulnerable
+                      ? <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--purple)' }}><Zap className="h-3 w-3" />Yes</span>
+                      : <span className="text-xs" style={{ color: 'var(--t3)' }}>No</span>}
+                  </td>
+                  <td className="text-xs" style={{ color: 'var(--t2)' }}>{f.date}</td>
+                  <td className="text-right">
+                    <ChevronRight className="h-4 w-4 inline" style={{ color: 'var(--t3)' }} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Findings Tab ───────────────────────────────────────────────────────── */
+function FindingsTab({ onSelectFinding }) {
+  const [search, setSearch] = useState('');
+  const [tierFilter, setTierFilter] = useState('All');
+  const [quantumOnly, setQuantumOnly] = useState(false);
+
+  const filtered = useMemo(() => {
+    return mockFindings.filter((f) => {
+      const matchTier = tierFilter === 'All' || f.risk_tier === tierFilter;
+      const matchSearch = !search || f.file.toLowerCase().includes(search.toLowerCase())
+        || f.algorithm.toLowerCase().includes(search.toLowerCase());
+      const matchQ = !quantumOnly || f.quantum_vulnerable;
+      return matchTier && matchSearch && matchQ;
+    });
+  }, [search, tierFilter, quantumOnly]);
+
+  return (
+    <div className="space-y-4">
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 rounded-xl border px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'var(--surface-h)' }}>
+          <Search className="h-4 w-4 shrink-0" style={{ color: 'var(--t3)' }} />
+          <input
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search file or algorithm…"
+            className="bg-transparent text-sm focus:outline-none w-52"
+            style={{ color: 'var(--t1)' }}
+          />
+        </div>
+        <div className="flex items-center gap-1 rounded-xl border p-1" style={{ borderColor: 'var(--border)', background: 'var(--surface-h)' }}>
+          {['All', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((t) => (
+            <button key={t}
+              onClick={() => setTierFilter(t)}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                background: tierFilter === t ? 'var(--cyan-10)' : 'transparent',
+                color: tierFilter === t ? 'var(--cyan)' : 'var(--t2)',
+              }}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setQuantumOnly((v) => !v)}
+          className="flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-medium transition-colors badge"
+          style={{
+             borderColor: quantumOnly ? 'rgba(157,110,248,0.25)' : 'var(--border)',
+             background: quantumOnly ? 'var(--purple-10)' : 'transparent',
+             color: quantumOnly ? 'var(--purple)' : 'var(--t2)'
+          }}>
+          <Zap className="h-3.5 w-3.5" /> Quantum only
+        </button>
+        <button
+          onClick={() => {
+            const blob = new Blob([JSON.stringify(mockCbom, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'ecdat-cbom.json'; a.click();
+          }}
+          className="btn-ghost ml-auto flex items-center gap-2">
+          <Download className="h-3.5 w-3.5" /> Export CBOM
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="card overflow-hidden">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Risk Tier</th>
+              <th>Algorithm</th>
+              <th>File</th>
+              <th>Line</th>
+              <th>Confidence</th>
+              <th>Quantum</th>
+              <th>Date</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr><td colSpan={8} className="text-center py-8 text-sm" style={{ color: 'var(--t3)' }}>No findings match filters</td></tr>
+            )}
+            {filtered.map((f) => (
+              <motion.tr
+                key={f.id}
+                onClick={() => onSelectFinding(f)}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="cursor-pointer"
+              >
+                <td><RiskBadge tier={f.risk_tier} /></td>
+                <td className="mono font-semibold" style={{ color: 'var(--t1)' }}>{f.algorithm}</td>
+                <td className="mono" style={{ color: 'var(--t1)' }}>{f.file}</td>
+                <td className="num" style={{ color: 'var(--t2)' }}>{f.line}</td>
+                <td>
+                  <span className="flex items-center gap-1.5 capitalize" style={{ color: 'var(--t2)' }}>
+                    <ConfidenceDot level={f.confidence} />{f.confidence}
+                  </span>
+                </td>
+                <td>
+                  {f.quantum_vulnerable
+                    ? <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--purple)' }}><Zap className="h-3 w-3" />Yes</span>
+                    : <span className="text-xs" style={{ color: 'var(--t3)' }}>—</span>}
+                </td>
+                <td className="text-xs num" style={{ color: 'var(--t2)' }}>{f.date}</td>
+                <td className="text-right">
+                  <ChevronRight className="h-4 w-4 inline" style={{ color: 'var(--t3)' }} />
+                </td>
+              </motion.tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="text-xs text-right num" style={{ color: 'var(--t3)' }}>{filtered.length} of {mockFindings.length} findings</div>
+    </div>
+  );
+}
+
+/* ─── Scan History Tab ───────────────────────────────────────────────────── */
+function ScansTab({ onNewScan }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={onNewScan} className="btn-primary flex items-center gap-2">
+          <Plus className="h-4 w-4" /> New scan
+        </button>
+      </div>
+      <div className="space-y-3">
+        {mockScans.map((scan, i) => (
+          <motion.div
+            key={scan.id}
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06 }}
+            className="card flex items-center justify-between p-5 cursor-pointer"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl shrink-0" style={{ background: 'var(--surface-h)', color: 'var(--t2)' }}>
+                <Code2 className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--t1)' }}>
+                  {scan.repository}
+                  <ExternalLink className="h-3 w-3" style={{ color: 'var(--t3)' }} />
+                </div>
+                <div className="mt-1 flex items-center gap-3 text-xs num" style={{ color: 'var(--t2)' }}>
+                  <span className="flex items-center gap-1"><GitBranch className="h-3 w-3" />{scan.branch}</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{scan.duration}</span>
+                  <span>{scan.date}</span>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  {scan.languages.map((l) => (
+                    <span key={l} className="rounded-full border px-2 py-0.5 text-[10px]" style={{ borderColor: 'var(--border)', color: 'var(--t2)' }}>{l}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-5 shrink-0">
+              <div className="text-right">
+                <div className="text-lg font-black num" style={{ color: scan.critical > 0 ? 'var(--critical)' : 'var(--t1)' }}>{scan.findings}</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>findings</div>
+              </div>
+              <span className={`badge ${STATUS_STYLE[scan.status] || 'badge-low'} flex gap-1.5 items-center`}>
+                {STATUS_ICON[scan.status]} {scan.status}
+              </span>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── CBOM Tab ───────────────────────────────────────────────────────────── */
+function CbomTab() {
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(mockCbom, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'ecdat-cbom.json'; a.click();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>CBOM Library</div>
+          <div className="text-xs mt-0.5 num" style={{ color: 'var(--t2)' }}>CycloneDX 1.6 — {mockCbom.components.length} cryptographic assets</div>
+        </div>
+        <button onClick={handleExport} className="btn-primary flex items-center gap-2">
+          <Download className="h-4 w-4" /> Export CBOM JSON
+        </button>
+      </div>
+
+      {/* CBOM metadata */}
+      <div className="card p-5">
+        <div className="mb-4 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>Metadata</div>
+        <div className="grid gap-3 text-sm sm:grid-cols-2">
+          {[
+            ['Format', 'CycloneDX'], ['Spec Version', '1.6'], ['Serial', mockCbom.serialNumber],
+            ['Generated', mockCbom.metadata.timestamp], ['Tool', 'ECDAT v1.0.0 by Port53'],
+          ].map(([k, v]) => (
+            <div key={k} className="flex flex-col gap-0.5">
+              <span className="text-xs" style={{ color: 'var(--t2)' }}>{k}</span>
+              <span className="mono text-xs break-all" style={{ color: 'var(--t1)' }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Components */}
+      <div className="card overflow-hidden">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Algorithm</th>
+              <th>File</th>
+              <th>Risk</th>
+              <th>Quantum</th>
+            </tr>
+          </thead>
+          <tbody>
+            {mockFindings.map((f, i) => (
+              <tr key={f.id}>
+                <td className="mono num" style={{ color: 'var(--t3)' }}>{String(i + 1).padStart(2, '0')}</td>
+                <td className="mono font-semibold" style={{ color: 'var(--t1)' }}>{f.algorithm}</td>
+                <td className="mono" style={{ color: 'var(--t1)' }}>{f.file}</td>
+                <td><RiskBadge tier={f.risk_tier} /></td>
+                <td>
+                  {f.quantum_vulnerable ? <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--purple)' }}><Zap className="h-3 w-3" />Yes</span> : <span className="text-xs" style={{ color: 'var(--t3)' }}>No</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Reports Tab ────────────────────────────────────────────────────────── */
+function ReportsTab() {
+  const reports = [
+    { name: 'Executive Summary — August 2026', type: 'PDF', size: '284 KB', date: '2026-08-24', status: 'Ready' },
+    { name: 'NIST PQC Compliance Report', type: 'PDF', size: '512 KB', date: '2026-08-22', status: 'Ready' },
+    { name: 'CycloneDX CBOM Export', type: 'JSON', size: '48 KB', date: '2026-08-24', status: 'Ready' },
+    { name: 'Full Findings Export', type: 'CSV', size: '18 KB', date: '2026-08-20', status: 'Ready' },
+  ];
+
+  const handleDownload = (report) => {
+    if (report.type === 'JSON') {
+      const blob = new Blob([JSON.stringify(mockCbom, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob); const a = document.createElement('a');
+      a.href = url; a.download = 'ecdat-cbom.json'; a.click();
+    } else if (report.type === 'CSV') {
+      const header = 'ID,File,Algorithm,Line,Risk Tier,Quantum,Date\n';
+      const rows = mockFindings.map(f => `${f.id},${f.file},${f.algorithm},${f.line},${f.risk_tier},${f.quantum_vulnerable},${f.date}`).join('\n');
+      const blob = new Blob([header + rows], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob); const a = document.createElement('a');
+      a.href = url; a.download = 'ecdat-findings.csv'; a.click();
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {reports.map((r, i) => (
+        <motion.div
+          key={r.name}
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.06 }}
+          className="card flex items-center justify-between p-5"
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-bold" style={{ background: 'var(--surface-h)', color: 'var(--t2)' }}>
+              {r.type}
+            </div>
+            <div>
+              <div className="text-sm font-medium" style={{ color: 'var(--t1)' }}>{r.name}</div>
+              <div className="text-xs mt-0.5 num" style={{ color: 'var(--t2)' }}>{r.size} · {r.date}</div>
+            </div>
+          </div>
+          <button onClick={() => handleDownload(r)} className="btn-ghost flex items-center gap-2">
+            <Download className="h-3.5 w-3.5" /> Download
+          </button>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Settings Tab ───────────────────────────────────────────────────────── */
+function SettingsTab({ onLogout }) {
+  const [apiKey, setApiKey] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="card p-6 space-y-4">
+        <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>LLM Remediation</div>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>Google Gemini API Key</label>
+            <input value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+              placeholder="AIza…" className="field mono" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>Provider</label>
+            <select className="field">
+              {['Gemini (Google)', 'OpenAI', 'Groq (Llama)', 'Grok (xAI)', 'Ollama (Local)'].map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <button type="submit" className="btn-primary w-full sm:w-auto mt-2" style={{ background: saved ? 'var(--green)' : 'var(--cyan)' }}>
+            {saved ? <span className="flex items-center gap-2 justify-center"><CheckCircle2 className="h-4 w-4" /> Saved!</span> : 'Save settings'}
+          </button>
+        </form>
+      </div>
+
+      <div className="card p-6 space-y-3">
+        <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>Account</div>
+        <div className="text-sm" style={{ color: 'var(--t2)' }}>analyst@ecdat.local · Analyst role</div>
+        <button onClick={onLogout}
+          className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition-colors"
+          style={{ borderColor: 'rgba(255,61,61,0.3)', background: 'rgba(255,61,61,0.06)', color: 'var(--critical)' }}>
+          <LogOut className="h-4 w-4" /> Sign out
+        </button>
+      </div>
+
+      <div className="card p-6 space-y-3">
+        <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>Backend connection</div>
+        <div className="flex items-center gap-2 text-xs mono" style={{ color: 'var(--t1)' }}>
+          <span className="live-ping relative flex h-2 w-2 rounded-full" style={{ background: 'var(--green)' }} />
+          API: http://localhost:8000
+        </div>
+        <div className="text-xs num" style={{ color: 'var(--t3)' }}>Scan engine v1.0.0 · DB: ecdat.db</div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main DashboardPage ─────────────────────────────────────────────────── */
+export default function DashboardPage() {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [showNewScan, setShowNewScan] = useState(false);
+  const [selectedFinding, setSelectedFinding] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate('/');
+  }, [logout, navigate]);
+
+  const tabProps = {
+    onSelectFinding: setSelectedFinding,
+    onNewScan: () => setShowNewScan(true),
+    onLogout: handleLogout,
+  };
+
+  const TAB_CONTENT = {
+    overview: <OverviewTab {...tabProps} />,
+    findings: <FindingsTab {...tabProps} />,
+    scans:    <ScansTab {...tabProps} />,
+    cbom:     <CbomTab />,
+    reports:  <ReportsTab />,
+    settings: <SettingsTab {...tabProps} />,
+  };
+
+  return (
+    <div className="min-h-screen bg-void" style={{ background: 'var(--void)' }}>
+
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b backdrop-blur-md" style={{ borderColor: 'var(--border)', background: 'var(--surface)', opacity: 0.95 }}>
+        <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSidebarOpen(v => !v)} className="rounded-lg p-1.5 lg:hidden" style={{ color: 'var(--t3)' }}>
+              <LayoutDashboard className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ background: 'var(--cyan-10)', color: 'var(--cyan)' }}>
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold leading-none" style={{ color: 'var(--t1)' }}>ECDAT</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'var(--t3)' }}>Dashboard</div>
+              </div>
             </div>
           </div>
 
-          <div className="hidden items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-300 md:flex">
-            <Search className="h-4 w-4 text-slate-500" />
-            <span>Search scans, findings, repos...</span>
+          {/* Search */}
+          <div className="hidden items-center gap-2 rounded-xl border px-3 py-2 text-sm md:flex" style={{ borderColor: 'var(--border)', background: 'var(--surface-h)', color: 'var(--t2)' }}>
+            <Search className="h-4 w-4" style={{ color: 'var(--t3)' }} />
+            <span>Search findings, scans…</span>
+            <span className="ml-2 rounded border px-1.5 py-0.5 text-[10px]" style={{ borderColor: 'var(--border-s)', color: 'var(--t3)' }}>⌘K</span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <button className="relative rounded-full border border-slate-700 p-2 text-slate-200">
+          <div className="flex items-center gap-3">
+            <button className="relative rounded-full border p-2 transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--t2)' }} onMouseOver={e=>e.currentTarget.style.color='var(--t1)'} onMouseOut={e=>e.currentTarget.style.color='var(--t2)'}>
               <Bell className="h-4 w-4" />
-              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500" />
+              <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full" style={{ background: 'var(--critical)' }} />
             </button>
-            <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-2 py-1.5">
-              <UserCircle className="h-7 w-7 text-slate-300" />
+            <button
+              onClick={() => setShowNewScan(true)}
+              className="btn-primary hidden items-center gap-2 sm:flex">
+              <Plus className="h-4 w-4" /> New scan
+            </button>
+            <div className="flex items-center gap-2 rounded-full border px-2 py-1.5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+              <UserCircle className="h-6 w-6" style={{ color: 'var(--t3)' }} />
               <div className="hidden text-left sm:block">
-                <div className="text-sm font-medium text-white">Analyst</div>
-                <div className="text-[10px] text-slate-400">analyst@ecdat.local</div>
+                <div className="text-xs font-medium" style={{ color: 'var(--t1)' }}>{user?.role || 'Analyst'}</div>
+                <div className="text-[10px]" style={{ color: 'var(--t2)' }}>{user?.email || 'analyst@ecdat.local'}</div>
               </div>
-              <ChevronDown className="h-4 w-4 text-slate-400" />
             </div>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1600px]">
-        <aside className="hidden min-h-[calc(100vh-64px)] w-56 border-r border-slate-800 bg-slate-950/70 p-4 lg:block">
-          <div className="space-y-2">
-            {sideItems.map(({ label, icon: Icon }) => (
-              <button
-                key={label}
-                onClick={() => setActiveTab(label)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm ${activeTab === label ? 'border-l-2 border-accent-blue bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/80'}`}
-              >
-                <Icon className="h-4 w-4" />
+      <div className="flex">
+        {/* Sidebar */}
+        <AnimatePresence>
+          {(sidebarOpen) && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-20 lg:hidden"
+              style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)' }}
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        <aside className={`
+          fixed top-16 z-20 h-[calc(100vh-64px)] w-56 border-r p-4 backdrop-blur-md transition-transform lg:sticky lg:translate-x-0
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `} style={{ borderColor: 'var(--border)', background: 'var(--surface)', opacity: 0.95 }}>
+          <nav className="space-y-1">
+            {NAV.map(({ id, label, icon: Icon }) => (
+              <button key={id}
+                onClick={() => { setActiveTab(id); setSidebarOpen(false); }}
+                className={`nav-item ${activeTab === id ? 'active' : ''}`}>
+                <Icon className="h-4 w-4 shrink-0" />
                 {label}
               </button>
             ))}
+          </nav>
+
+          <div className="mt-6 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={() => setShowNewScan(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold transition-colors"
+              style={{ borderColor: 'var(--cyan-20)', background: 'var(--cyan-10)', color: 'var(--cyan)' }}>
+              <Plus className="h-4 w-4" /> New scan
+            </button>
           </div>
 
-          <button className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-blue px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-blue-400">
-            <Plus className="h-4 w-4" />
-            New Scan
-          </button>
+          <div className="absolute bottom-4 left-4 right-4">
+            <div className="rounded-xl border p-3 text-xs space-y-1" style={{ borderColor: 'var(--border)', background: 'var(--surface-h)', color: 'var(--t3)' }}>
+              <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--green)' }} />API connected</div>
+              <div className="num">ECDAT v1.0.0</div>
+            </div>
+          </div>
         </aside>
 
-        <main className="flex-1 p-4 sm:p-6">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {statCards.map((card) => (
-              <div key={card.title} className="rounded-2xl border border-slate-700 bg-slate-900/80 p-5">
-                <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-slate-400">
-                  <span>{card.title}</span>
-                  <ShieldCheck className="h-4 w-4 text-accent-blue" />
-                </div>
-                <div className={`mt-4 text-3xl font-black ${card.accent}`}>{card.value}</div>
-                <div className="mt-2 text-xs text-slate-400">{card.trend}</div>
+        {/* Main content */}
+        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:ml-0">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold capitalize" style={{ color: 'var(--t1)' }}>
+                {NAV.find(n => n.id === activeTab)?.label}
+              </h1>
+              <div className="mt-0.5 text-xs num" style={{ color: 'var(--t2)' }}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </div>
-            ))}
+            </div>
+            <button onClick={() => window.location.reload()} className="btn-ghost p-2">
+              <RefreshCw className="h-4 w-4" />
+            </button>
           </div>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_1.4fr]">
-            <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="text-lg font-semibold text-white">Risk distribution</div>
-                <button className="flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300">Last 30 days <ChevronDown className="h-3 w-3" /></button>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer>
-                  <PieChart>
-                    <Pie data={donutData} dataKey="value" innerRadius={56} outerRadius={88} paddingAngle={2}>
-                      {donutData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-4 text-center text-xl font-bold text-white">{total}</div>
-              <div className="mt-2 text-center text-xs text-slate-400">findings</div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="text-lg font-semibold text-white">Finding trends</div>
-                <div className="flex gap-2 text-xs">
-                  {[ '7d', '30d', 'All' ].map((filter) => (
-                    <button key={filter} className={`rounded-full px-2 py-1 ${filter === '30d' ? 'bg-accent-blue text-slate-950' : 'bg-slate-800 text-slate-300'}`}>{filter}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer>
-                  <BarChart data={trendData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                    <XAxis dataKey="day" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" />
-                    <Tooltip />
-                    <Bar dataKey="findings" fill="#60a5fa" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-slate-700 bg-slate-900/80 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="text-lg font-semibold text-white">Recent findings</div>
-              <div className="flex items-center gap-3 text-sm text-slate-400">
-                <button className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-1.5"><ListFilter className="h-4 w-4" /> Filters</button>
-                <button className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-1.5"><Download className="h-4 w-4" /> Export</button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="text-slate-400">
-                  <tr>
-                    <th className="pb-3">Severity</th>
-                    <th className="pb-3">File</th>
-                    <th className="pb-3">Algorithm</th>
-                    <th className="pb-3">Line</th>
-                    <th className="pb-3">Confidence</th>
-                    <th className="pb-3">Risk Tier</th>
-                    <th className="pb-3">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {findings.map((item) => (
-                    <tr key={item.file} className="border-t border-slate-800 text-slate-200">
-                      <td className="py-3"><span className={`rounded-full border px-2 py-1 text-[11px] font-medium ${item.severity === 'CRITICAL' ? 'border-red-500/40 bg-red-500/10 text-red-300' : item.severity === 'HIGH' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' : item.severity === 'MEDIUM' ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'}`}>{item.severity}</span></td>
-                      <td className="py-3 font-mono text-xs text-accent-blue">{item.file}</td>
-                      <td className="py-3">{item.algorithm}</td>
-                      <td className="py-3">{item.line}</td>
-                      <td className="py-3">{item.confidence}</td>
-                      <td className="py-3">{item.risk}</td>
-                      <td className="py-3">{item.date}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+            >
+              {TAB_CONTENT[activeTab]}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {showNewScan && <NewScanModal onClose={() => setShowNewScan(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedFinding && (
+          <FindingPanel finding={selectedFinding} onClose={() => setSelectedFinding(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
