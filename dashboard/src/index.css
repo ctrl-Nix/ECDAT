@@ -1,0 +1,279 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ECDAT  —  "Quiet Precision" Design System
+   v1.0 · Governed by Design Strategy Document
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Chromatic void token scale ─────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+
+  /* Backgrounds — Light Pink & White */
+  --void:         #FFF6F7;  /* Third band */
+  --surface:      #FFFFFF;  /* Pure white for cards */
+  --surface-r:    #F8D8DD;  /* Second band */
+  --surface-h:    #FBE8EA;  /* Hover state */
+  --border:       #F8D8DD;  /* Second band */
+  --border-s:     #FF788D;  /* Top band */
+
+  /* Brand — Watermelon Pink */
+  --cyan:         #FF788D;  /* Top band */
+  --cyan-10:      rgba(255, 120, 141, 0.12);
+  --cyan-20:      rgba(255, 120, 141, 0.25);
+
+  /* Quantum risk — Dark Green */
+  --purple:       #236531;  /* Bottom band */
+  --purple-10:    rgba(35, 101, 49, 0.12);
+
+  /* Safe / Secondary */
+  --green:        #236531;  /* Bottom band */
+  --green-10:     rgba(35, 101, 49, 0.12);
+
+  /* Risk tiers — Professional semantic tones */
+  --critical:     #E53935;  
+  --high:         #FB8C00;  
+  --medium:       #FFB300;  
+  --low:          #236531;  /* Bottom band */
+
+  /* Text — Dark Green scale for readability on light pink */
+  --t1: #0A1C0E;  /* Extremely dark green */
+  --t2: #236531;  /* Bottom band */
+  --t3: #4B8C5B;  /* Muted mid-green */
+  --t4: #F8D8DD;  /* Second band */
+}
+
+/* ── Base reset ─────────────────────────────────────────────────────────── */
+html  { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--void);
+  color: var(--t1);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular numerals — non-negotiable for data tools */
+.num, [data-num], table td, table th,
+.stat-value, .badge-count {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
+}
+
+code, pre, kbd, .mono {
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.875em;
+}
+
+#root { min-height: 100vh; }
+*, *::before, *::after { box-sizing: border-box; }
+input, select, textarea, button { font: inherit; }
+
+/* ── Transitions — snappy, not theatrical ───────────────────────────────── */
+button, a, [role="button"] {
+  transition: color 0.1s ease, background-color 0.1s ease,
+              border-color 0.1s ease, opacity 0.12s ease;
+}
+
+/* ── Selection ──────────────────────────────────────────────────────────── */
+::selection { background: rgba(0, 200, 255, 0.18); color: #fff; }
+
+/* ── Scrollbar — ultra-thin, structural ─────────────────────────────────── */
+::-webkit-scrollbar         { width: 4px; height: 4px; }
+::-webkit-scrollbar-track   { background: transparent; }
+::-webkit-scrollbar-thumb   { background: var(--border-s); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-s); }
+
+/* ── Focus ring — ONLY valid use of cyan glow ───────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LAYOUT UTILITIES
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Structural grid overlay — opacity 0.035 max */
+.bg-grid {
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 52px 52px;
+  opacity: 0.35;
+}
+
+/* Radial ambient — ONLY in hero, max 0.04 opacity */
+.hero-ambient {
+  background: radial-gradient(
+    ellipse 60% 50% at 50% -5%,
+    rgba(0, 200, 255, 0.04) 0%,
+    transparent 70%
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COMPONENT TOKENS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Cards / panels — border-only, NO shadow ────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.card-raised {
+  background: var(--surface-r);
+  border: 1px solid var(--border-s);
+  border-radius: 14px;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table thead th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t3);
+  border-bottom: 1px solid var(--border);
+}
+.data-table tbody tr {
+  border-bottom: 1px solid rgba(22, 32, 53, 0.6);
+  transition: background 0.08s;
+}
+.data-table tbody tr:hover { background: rgba(255, 255, 255, 0.015); }
+.data-table tbody td { padding: 10px 16px; color: var(--t1); }
+
+/* ── Sidebar nav item ───────────────────────────────────────────────────── */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--t2);
+  transition: color 0.1s, background 0.1s;
+  border-left: 2px solid transparent;
+}
+.nav-item:hover { color: var(--t1); background: rgba(255,255,255,0.03); }
+.nav-item.active {
+  color: var(--cyan);
+  background: var(--cyan-10);
+  border-left-color: var(--cyan);
+  font-weight: 500;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--cyan);
+  color: var(--void);
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+.btn-primary:hover { opacity: 0.88; }
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-s);
+  color: var(--t2);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+.btn-ghost:hover { color: var(--t1); border-color: var(--border-s); }
+
+/* ── Risk badges ────────────────────────────────────────────────────────── */
+.badge { display: inline-flex; align-items: center; border-radius: 9999px;
+         padding: 2px 10px; font-size: 11px; font-weight: 600; border: 1px solid; }
+.badge-critical { color: var(--critical); border-color: rgba(255,61,61,0.25); background: rgba(255,61,61,0.06); }
+.badge-high     { color: var(--high);     border-color: rgba(255,122,26,0.25); background: rgba(255,122,26,0.06); }
+.badge-medium   { color: var(--medium);   border-color: rgba(251,191,36,0.25); background: rgba(251,191,36,0.06); }
+.badge-low      { color: var(--low);      border-color: rgba(0,229,160,0.25);  background: rgba(0,229,160,0.06); }
+.badge-quantum  { color: var(--purple);   border-color: rgba(157,110,248,0.25);background: rgba(157,110,248,0.06); }
+
+/* ── Live ping — ONLY valid decorative animation ───────────────────────── */
+@keyframes live-ping {
+  0%    { transform: scale(1); opacity: 0.8; }
+  70%   { transform: scale(2.2); opacity: 0; }
+  100%  { transform: scale(2.2); opacity: 0; }
+}
+.live-ping::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: live-ping 1.6s cubic-bezier(0,0,0.2,1) infinite;
+}
+
+/* ── Input fields ───────────────────────────────────────────────────────── */
+.field {
+  width: 100%;
+  background: var(--surface-h);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--t1);
+  transition: border-color 0.1s;
+}
+.field::placeholder { color: var(--t3); }
+.field:focus { border-color: var(--cyan); outline: none; }
+.field.error { border-color: rgba(255,61,61,0.5); }
+
+/* ── Shimmer skeleton ───────────────────────────────────────────────────── */
+.shimmer {
+  background: linear-gradient(90deg, var(--surface) 0%, var(--surface-h) 50%, var(--surface) 100%);
+  background-size: 300% 100%;
+  animation: shimmer 1.8s linear infinite;
+  border-radius: 6px;
+}
+@keyframes shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* ── Progress bar ───────────────────────────────────────────────────────── */
+.progress-track { height: 3px; background: var(--border); border-radius: 9999px; overflow: hidden; }
+.progress-fill  { height: 100%; background: var(--cyan); border-radius: 9999px; transition: width 0.1s linear; }
+
+/* ── Terminal ───────────────────────────────────────────────────────────── */
+.terminal {
+  background: #020409;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* ── Cursor blink ───────────────────────────────────────────────────────── */
+.cursor::after { content: '█'; color: var(--cyan); animation: blink 1s step-end infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
