@@ -4,6 +4,7 @@ Unit tests for build_prompt, get_remediation_text, and LLM fallback behavior.
 
 from unittest.mock import MagicMock, patch
 import pytest
+from api.core.config import settings
 from api.routers.remediation import build_prompt, get_remediation_text
 
 
@@ -21,7 +22,8 @@ def test_build_prompt():
 
 def test_get_remediation_text_success(monkeypatch):
     """Test get_remediation_text returns source 'llm' when LLM call succeeds."""
-    monkeypatch.setenv("GOOGLE_API_KEY", "valid_mock_key")
+    monkeypatch.setattr(settings, "ALLOW_REMOTE_REMEDIATION", True)
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "valid_mock_key")
 
     mock_response = MagicMock()
     mock_response.text = "MD5 is cryptographically broken for hashing. Recommended fix: SHA-256 or BLAKE2."
@@ -41,7 +43,8 @@ def test_get_remediation_text_fallback_on_invalid_key(monkeypatch):
     Test that with the LLM API key deliberately invalidated/broken,
     get_remediation_text catches the exception and returns fallback with source 'table'.
     """
-    monkeypatch.setenv("GOOGLE_API_KEY", "INVALID_API_KEY_12345")
+    monkeypatch.setattr(settings, "ALLOW_REMOTE_REMEDIATION", True)
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "INVALID_API_KEY_12345")
 
     with patch("google.genai.Client") as mock_client_cls:
         mock_client_instance = MagicMock()
@@ -58,7 +61,7 @@ def test_get_remediation_text_fallback_on_missing_key(monkeypatch):
     """
     Test fallback behavior when GOOGLE_API_KEY environment variable is absent.
     """
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
 
     res = get_remediation_text("DES", "legacy/cipher.py", 88)
     assert res["source"] == "table"
@@ -80,6 +83,7 @@ def test_detect_provider():
 
 def test_get_remediation_openai_compatible(monkeypatch):
     """Test OpenAI / Grok / Groq / Llama execution via mocked HTTPX."""
+    monkeypatch.setattr(settings, "ALLOW_REMOTE_REMEDIATION", True)
     mock_resp = MagicMock()
     mock_resp.json.return_value = {
         "choices": [{"message": {"content": "Use SHA-256 instead of MD5 for secure hashing."}}]
@@ -96,6 +100,7 @@ def test_get_remediation_openai_compatible(monkeypatch):
 
 def test_get_remediation_groq_llama(monkeypatch):
     """Test Groq Llama provider with gsk_ key."""
+    monkeypatch.setattr(settings, "ALLOW_REMOTE_REMEDIATION", True)
     mock_resp = MagicMock()
     mock_resp.json.return_value = {
         "choices": [{"message": {"content": "Replace DES with AES-256-GCM to prevent cryptanalytic attacks."}}]

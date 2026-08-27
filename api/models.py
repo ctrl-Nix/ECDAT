@@ -34,6 +34,30 @@ class FindingOut(BaseModel):
     risk_tier: str | None = None
     risk_reason: str | None = None
     criticality: str
+    matched_call: str | None = None
+    library: str | None = None
+    primitive: str | None = None
+    language: str | None = None
+    weak_by_default: bool | None = None
+    detection_method: str | None = None
+    source_context: str = "SOURCE"
+    risk_assessment: "RiskAssessmentOut | None" = None
+
+
+class RiskAssessmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    risk_model_version: str
+    classical_broken: bool
+    quantum_vulnerable: bool
+    hndl_exposure: str
+    recommended_replacement: str | None = None
+    recommendation_type: str | None = None
+    migration_effort_days: int | None = None
+    data_shelf_life_years: float | None = None
+    quantum_threat_horizon_years: float | None = None
+    assumption_source: str | None = None
+    assessed_at: dt.datetime | None = None
 
 
 class ScanOut(BaseModel):
@@ -76,7 +100,14 @@ class RemediationRequest(BaseModel):
     algorithm: str
     file: str = "unknown"
     line: int = 1
-    api_key: str | None = None
     provider: str | None = None
     model: str | None = None
+
+
+class ReportIngestResponse(BaseModel):
+    report_id: str
+    scan_id: int
+    accepted: bool
+    bundle_digest: str
+    message: str
 

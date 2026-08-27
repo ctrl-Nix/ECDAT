@@ -23,24 +23,48 @@ CALL_RULES = {
     "hashlib.sha384": {"algorithm": "SHA-384", "primitive": "hash", "library": "hashlib"},
     "hashlib.sha512": {"algorithm": "SHA-512", "primitive": "hash", "library": "hashlib"},
 
+    "MD5.new": {"algorithm": "MD5", "primitive": "hash", "library": "PyCryptodome"},
+    "SHA1.new": {"algorithm": "SHA-1", "primitive": "hash", "library": "PyCryptodome"},
+    "SHA224.new": {"algorithm": "SHA-224", "primitive": "hash", "library": "PyCryptodome"},
+    "SHA256.new": {"algorithm": "SHA-256", "primitive": "hash", "library": "PyCryptodome"},
+    "SHA384.new": {"algorithm": "SHA-384", "primitive": "hash", "library": "PyCryptodome"},
+    "SHA512.new": {"algorithm": "SHA-512", "primitive": "hash", "library": "PyCryptodome"},
+
     "DES.new":  {"algorithm": "DES", "primitive": "encrypt", "library": "PyCryptodome"},
+    "DES3.new": {"algorithm": "3DES", "primitive": "encrypt", "library": "PyCryptodome"},
     "ARC4.new": {"algorithm": "RC4", "primitive": "encrypt", "library": "PyCryptodome"},
     "AES.new":  {"algorithm": "AES", "primitive": "encrypt", "library": "PyCryptodome"},
     "HMAC.new": {"algorithm": "HMAC", "primitive": "mac", "library": "PyCryptodome"},
 
     "RSA.generate":             {"algorithm": "RSA", "primitive": "asymmetric-keygen", "library": "PyCryptodome"},
     "rsa.generate_private_key": {"algorithm": "RSA", "primitive": "asymmetric-keygen", "library": "cryptography"},
+    "ec.generate_private_key": {"algorithm": "ECC", "primitive": "asymmetric-keygen", "library": "cryptography"},
+    "dsa.generate_private_key": {"algorithm": "DSA", "primitive": "asymmetric-keygen", "library": "cryptography"},
+
+    "hashes.MD5": {"algorithm": "MD5", "primitive": "hash", "library": "cryptography"},
+    "hashes.SHA1": {"algorithm": "SHA-1", "primitive": "hash", "library": "cryptography"},
+    "hashes.SHA256": {"algorithm": "SHA-256", "primitive": "hash", "library": "cryptography"},
+    "hashes.SHA384": {"algorithm": "SHA-384", "primitive": "hash", "library": "cryptography"},
+    "hashes.SHA512": {"algorithm": "SHA-512", "primitive": "hash", "library": "cryptography"},
+
+    "algorithms.ARC4": {"algorithm": "RC4", "primitive": "encrypt", "library": "cryptography"},
+    "algorithms.TripleDES": {"algorithm": "3DES", "primitive": "encrypt", "library": "cryptography"},
+    "algorithms.AES": {"algorithm": "AES", "primitive": "encrypt", "library": "cryptography"},
 
     "ssl.SSLContext":              {"algorithm": "TLS", "primitive": "protocol", "library": "ssl"},
     "ssl.create_default_context": {"algorithm": "TLS", "primitive": "protocol", "library": "ssl"},
     "ssl.wrap_socket":             {"algorithm": "TLS", "primitive": "protocol", "library": "ssl"},
 }
 
-METHOD_ONLY_RULES = {
-    "load_cert_chain": {"algorithm": "TLS", "primitive": "certificate-load", "library": "ssl"},
+WEAK_ALGORITHMS = {"MD5", "SHA-1", "DES", "3DES", "RC4"}
+HASHLIB_NEW_ALGORITHMS = {
+    "md5": "MD5",
+    "sha1": "SHA-1",
+    "sha224": "SHA-224",
+    "sha256": "SHA-256",
+    "sha384": "SHA-384",
+    "sha512": "SHA-512",
 }
-
-WEAK_ALGORITHMS = {"MD5", "SHA-1", "DES", "RC4"}
 
 
 class CryptoVisitor(ast.NodeVisitor):
@@ -70,15 +94,60 @@ class CryptoVisitor(ast.NodeVisitor):
             self.aliases[local_name] = f"{module}.{alias.name}"
         self.generic_visit(node)
 
-    def _resolve_call_name(self, func: ast.expr):
-        if isinstance(func, ast.Attribute):
-            if isinstance(func.value, ast.Name):
-                base = self.aliases.get(func.value.id, func.value.id)
-                base_short = base.split(".")[-1]
-                return f"{base_short}.{func.attr}"
-            return func.attr
-        if isinstance(func, ast.Name):
-            return self.aliases.get(func.id, func.id)
+    def _resolve_call_candidates(self, func: ast.expr) -> list[str]:
+        """Return import-backed names that can identify a called crypto API.
+
+        The scanner deliberately requires an explicit import before emitting a
+        finding.  This avoids treating arbitrary application classes named
+        ``AES`` or ``MessageDigest`` as cryptographic assets.  Several suffix
+        candidates are retained so aliases such as ``from Crypto.Cipher import
+        AES`` and ``from cryptography... import hashes`` resolve to the compact
+        rule keys used below.
+        """
+        parts: list[str] = []
+        current = func
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+
+        if isinstance(current, ast.Name):
+            imported = self.aliases.get(current.id)
+            if not imported:
+                return []
+            full_name = ".".join([imported, *reversed(parts)]) if parts else imported
+        elif not parts and isinstance(func, ast.Name):
+            full_name = self.aliases.get(func.id, "")
+            if not full_name:
+                return []
+        else:
+            return []
+
+        segments = full_name.split(".")
+        candidates = [full_name]
+        for width in (3, 2):
+            if len(segments) >= width:
+                candidates.append(".".join(segments[-width:]))
+        return list(dict.fromkeys(candidates))
+
+    @staticmethod
+    def _first_string_arg(node: ast.Call) -> Optional[str]:
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                return arg.value
+        return None
+
+    @staticmethod
+    def _hmac_digest_name(node: ast.Call) -> Optional[str]:
+        """Return an explicitly literal digest passed to ``hmac.new``."""
+        if len(node.args) >= 3 and isinstance(node.args[2], ast.Constant):
+            value = node.args[2].value
+            if isinstance(value, str):
+                return value
+        for keyword in node.keywords:
+            if keyword.arg == "digestmod" and isinstance(keyword.value, ast.Constant):
+                value = keyword.value.value
+                if isinstance(value, str):
+                    return value
         return None
 
     def _extract_key_size(self, node: ast.Call) -> Optional[int]:
@@ -98,19 +167,25 @@ class CryptoVisitor(ast.NodeVisitor):
             return self.source_lines[node.lineno - 1].strip()
 
     def visit_Call(self, node: ast.Call):
-        resolved = self._resolve_call_name(node.func)
+        candidates = self._resolve_call_candidates(node.func)
         rule = None
-        matched_key = None
+        if candidates:
+            for candidate in candidates:
+                if candidate in CALL_RULES:
+                    rule = CALL_RULES[candidate]
+                    break
 
-        if resolved in CALL_RULES:
-            rule = CALL_RULES[resolved]
-            matched_key = resolved
-        elif isinstance(node.func, ast.Attribute) and node.func.attr in METHOD_ONLY_RULES:
-            rule = METHOD_ONLY_RULES[node.func.attr]
-            matched_key = node.func.attr
+            if rule is None and "hashlib.new" in candidates:
+                algorithm = HASHLIB_NEW_ALGORITHMS.get((self._first_string_arg(node) or "").lower())
+                if algorithm:
+                    rule = {"algorithm": algorithm, "primitive": "hash", "library": "hashlib"}
+            if rule is None and "hmac.new" in candidates:
+                algorithm = HASHLIB_NEW_ALGORITHMS.get((self._hmac_digest_name(node) or "").lower())
+                if algorithm:
+                    rule = {"algorithm": algorithm, "primitive": "mac", "library": "hmac"}
 
         if rule:
-            key_size = self._extract_key_size(node) if rule["algorithm"] == "RSA" else None
+            key_size = self._extract_key_size(node) if rule["algorithm"] in {"RSA", "ECC", "DSA"} else None
             self.findings.append(Finding(
                 file=self.filename,
                 line=node.lineno,
@@ -120,7 +195,7 @@ class CryptoVisitor(ast.NodeVisitor):
                 primitive=rule["primitive"],
                 language="python",
                 weak_by_default=rule["algorithm"] in WEAK_ALGORITHMS,
-                confidence="high",  # Python's alias resolution is import-backed by construction
+                confidence="high",  # Emitted candidates are explicit-import-backed.
                 key_size=key_size,
                 detection_method="ast_static_analysis",
             ))
@@ -152,7 +227,7 @@ from scanner.constants import SKIP_DIRS, _should_skip
 def scan_directory(target: Path) -> list:
     all_findings = []
     for py_file in sorted(target.rglob("*.py")):
-        if _should_skip(py_file):
+        if _should_skip(py_file, target):
             continue
         all_findings.extend(scan_file(py_file))
     return all_findings

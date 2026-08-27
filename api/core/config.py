@@ -1,6 +1,8 @@
 """ECDAT API Configuration using pydantic-settings."""
 
-from typing import Optional
+from pathlib import Path
+from typing import Literal, Optional
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 
@@ -15,7 +17,9 @@ class Settings(BaseSettings):
     # API Server Configuration
     API_TITLE: str = "ECDAT API"
     API_VERSION: str = "1.0.0"
-    API_KEY: str = "ecdat-secret-key-2026"
+    # Generic API-key authentication is transitional and deliberately fails
+    # closed when absent. Browser bundles must never contain this value.
+    API_KEY: Optional[str] = None
     DEBUG: bool = False
 
     # Database Configuration
@@ -27,6 +31,8 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "db"
     POSTGRES_PORT: int = 5432
     DATABASE_URL: Optional[str] = None
+    POSTGRES_SSL_MODE: Literal["disable", "require", "verify-ca", "verify-full"] = "verify-full"
+    POSTGRES_SSL_ROOT_CERT: Optional[Path] = None
 
     @model_validator(mode="after")
     def construct_database_url(self) -> "Settings":
@@ -64,14 +70,23 @@ class Settings(BaseSettings):
 
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     OLLAMA_MODEL: str = "llama3"
+    ALLOW_REMOTE_REMEDIATION: bool = False
 
     # CORS & Network Configuration
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ]
+    # The deployed dashboard uses the same TLS gateway origin, so cross-origin
+    # browser access is disabled by default. Supply an explicit JSON list only
+    # for an approved separate frontend origin.
+    CORS_ORIGINS: list[str] = Field(default_factory=list)
+
+    # Report-sync agents are enrolled out of band. The JSON mapping has the
+    # shape {"agent-id": "base64-encoded-ed25519-public-key"} and must be
+    # supplied only to the online ingestion service, never the browser.
+    REPORT_SYNC_AGENT_KEYS: dict[str, str] = Field(default_factory=dict)
+    REPORT_SYNC_REQUIRE_MTLS: bool = True
+    REPORT_SYNC_MTLS_HEADER: str = "X-ECDAT-mTLS-Verified"
+    REPORT_SYNC_MAX_BUNDLE_BYTES: int = 1 * 1024 * 1024
+    SCAN_WORKSPACE_ROOT: Optional[Path] = None
+    ENABLE_LOCAL_SCAN_API: bool = False
 
     # Scanner & Execution Settings
     SCAN_TIMEOUT_SECONDS: int = 120

@@ -20,8 +20,14 @@
 CREATE TABLE IF NOT EXISTS repositories (
     id   SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
-    url  TEXT
+    url  TEXT,
+    organization_id TEXT,
+    external_id TEXT
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repositories_org_external
+    ON repositories (organization_id, external_id)
+    WHERE external_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- scans: one row per scan run against a repository.
@@ -30,7 +36,9 @@ CREATE TABLE IF NOT EXISTS scans (
     id         SERIAL PRIMARY KEY,
     repo_id    INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
     started_at TIMESTAMP DEFAULT now(),
-    status     TEXT DEFAULT 'pending'   -- pending | running | completed | failed
+    status     TEXT DEFAULT 'pending',  -- pending | running | completed | failed
+    source_scan_id TEXT,
+    scan_context TEXT
 );
 
 -- ---------------------------------------------------------------------------
@@ -47,6 +55,13 @@ CREATE TABLE IF NOT EXISTS findings (
     algorithm   TEXT NOT NULL,
     key_size    INTEGER,
     confidence  TEXT DEFAULT 'high',
+    matched_call TEXT,
+    library TEXT,
+    primitive TEXT,
+    language TEXT,
+    weak_by_default BOOLEAN,
+    detection_method TEXT,
+    source_context TEXT NOT NULL DEFAULT 'SOURCE',
 
     -- Risk fields (see skills/cbom-quantum-risk/SKILL.md)
     risk_tier   TEXT,            -- LOW / MEDIUM / HIGH / CRITICAL
@@ -62,3 +77,38 @@ CREATE TABLE IF NOT EXISTS findings (
 -- by risk tier.
 CREATE INDEX IF NOT EXISTS idx_findings_scan_id  ON findings(scan_id);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(risk_tier);
+CREATE INDEX IF NOT EXISTS idx_findings_source_context ON findings(source_context);
+
+-- Immutable interpretation and custody records. The raw finding remains a
+-- discovery fact; the assessment can be recomputed under a new model version.
+CREATE TABLE IF NOT EXISTS risk_assessments (
+    id SERIAL PRIMARY KEY,
+    finding_id INTEGER NOT NULL UNIQUE REFERENCES findings(id) ON DELETE CASCADE,
+    risk_model_version TEXT NOT NULL,
+    classical_broken BOOLEAN NOT NULL DEFAULT FALSE,
+    quantum_vulnerable BOOLEAN NOT NULL DEFAULT FALSE,
+    hndl_exposure TEXT NOT NULL DEFAULT 'UNKNOWN',
+    recommended_replacement TEXT,
+    recommendation_type TEXT,
+    migration_effort_days INTEGER,
+    data_shelf_life_years DOUBLE PRECISION,
+    quantum_threat_horizon_years DOUBLE PRECISION,
+    assumption_source TEXT,
+    assessed_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS reports (
+    id SERIAL PRIMARY KEY,
+    report_id TEXT NOT NULL UNIQUE,
+    scan_id INTEGER NOT NULL UNIQUE REFERENCES scans(id) ON DELETE CASCADE,
+    organization_id TEXT NOT NULL,
+    repository_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    bundle_digest TEXT NOT NULL UNIQUE,
+    signature_algorithm TEXT NOT NULL,
+    classification TEXT NOT NULL DEFAULT 'CONFIDENTIAL',
+    created_at TIMESTAMP DEFAULT now(),
+    expires_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_org_created ON reports(organization_id, created_at DESC);

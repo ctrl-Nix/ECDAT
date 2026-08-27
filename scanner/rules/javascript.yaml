@@ -1,6 +1,6 @@
 language: "javascript"
 rules:
-  # Hashes
+  # Hashes and keyed hashes
   - match_object: "crypto"
     match_method: "createHash"
     match_arg_contains: "md5"
@@ -8,7 +8,6 @@ rules:
     primitive: "hash"
     weak_by_default: true
     expected_module: "crypto"
-  
   - match_object: "crypto"
     match_method: "createHash"
     match_arg_contains: "sha1"
@@ -16,7 +15,13 @@ rules:
     primitive: "hash"
     weak_by_default: true
     expected_module: "crypto"
-    
+  - match_object: "crypto"
+    match_method: "createHash"
+    match_arg_contains: "sha224"
+    algorithm: "SHA-224"
+    primitive: "hash"
+    weak_by_default: false
+    expected_module: "crypto"
   - match_object: "crypto"
     match_method: "createHash"
     match_arg_contains: "sha256"
@@ -24,7 +29,6 @@ rules:
     primitive: "hash"
     weak_by_default: false
     expected_module: "crypto"
-
   - match_object: "crypto"
     match_method: "createHash"
     match_arg_contains: "sha384"
@@ -32,7 +36,6 @@ rules:
     primitive: "hash"
     weak_by_default: false
     expected_module: "crypto"
-
   - match_object: "crypto"
     match_method: "createHash"
     match_arg_contains: "sha512"
@@ -40,8 +43,50 @@ rules:
     primitive: "hash"
     weak_by_default: false
     expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createHmac"
+    match_arg_contains: "md5"
+    algorithm: "MD5"
+    primitive: "mac"
+    weak_by_default: true
+    expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createHmac"
+    match_arg_contains: "sha1"
+    algorithm: "SHA-1"
+    primitive: "mac"
+    weak_by_default: true
+    expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createHmac"
+    match_arg_contains: "sha256"
+    algorithm: "SHA-256"
+    primitive: "mac"
+    weak_by_default: false
+    expected_module: "crypto"
 
-  # Ciphers
+  # Ciphers: Triple-DES must precede DES because its name contains "des".
+  - match_object: "crypto"
+    match_method: "createCipher"
+    match_arg_contains: "des-ede3"
+    algorithm: "3DES"
+    primitive: "block-cipher"
+    weak_by_default: true
+    expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createCipheriv"
+    match_arg_contains: "des-ede3"
+    algorithm: "3DES"
+    primitive: "block-cipher"
+    weak_by_default: true
+    expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createCipher"
+    match_arg_contains: "des"
+    algorithm: "DES"
+    primitive: "block-cipher"
+    weak_by_default: true
+    expected_module: "crypto"
   - match_object: "crypto"
     match_method: "createCipheriv"
     match_arg_contains: "des"
@@ -49,7 +94,27 @@ rules:
     primitive: "block-cipher"
     weak_by_default: true
     expected_module: "crypto"
-
+  - match_object: "crypto"
+    match_method: "createCipher"
+    match_arg_contains: "rc4"
+    algorithm: "RC4"
+    primitive: "stream-cipher"
+    weak_by_default: true
+    expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createCipheriv"
+    match_arg_contains: "rc4"
+    algorithm: "RC4"
+    primitive: "stream-cipher"
+    weak_by_default: true
+    expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createCipher"
+    match_arg_contains: "aes"
+    algorithm: "AES"
+    primitive: "block-cipher"
+    weak_by_default: false
+    expected_module: "crypto"
   - match_object: "crypto"
     match_method: "createCipheriv"
     match_arg_contains: "aes"
@@ -58,40 +123,28 @@ rules:
     weak_by_default: false
     expected_module: "crypto"
 
-  - match_object: "crypto"
-    match_method: "createCipheriv"
-    match_arg_contains: "rc4"
-    algorithm: "RC4"
-    primitive: "stream-cipher"
-    weak_by_default: true
-    expected_module: "crypto"
-
-  # Key Generators (Asymmetric)
+  # Asymmetric key generation and signatures
   - match_object: "crypto"
     match_method: "generateKeyPairSync"
     match_arg_contains: "rsa"
     algorithm: "RSA"
-    primitive: "pke"
+    primitive: "asymmetric-keygen"
     weak_by_default: false
     expected_module: "crypto"
-
   - match_object: "crypto"
     match_method: "generateKeyPairSync"
     match_arg_contains: "ec"
     algorithm: "ECC"
-    primitive: "signature"
+    primitive: "asymmetric-keygen"
     weak_by_default: false
     expected_module: "crypto"
-
   - match_object: "crypto"
     match_method: "generateKeyPairSync"
     match_arg_contains: "dsa"
     algorithm: "DSA"
-    primitive: "signature"
+    primitive: "asymmetric-keygen"
     weak_by_default: false
     expected_module: "crypto"
-
-  # Signatures
   - match_object: "crypto"
     match_method: "createSign"
     match_arg_contains: "rsa"
@@ -99,3 +152,54 @@ rules:
     primitive: "signature"
     weak_by_default: false
     expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createSign"
+    match_arg_contains: "ec"
+    algorithm: "ECC"
+    primitive: "signature"
+    weak_by_default: false
+    expected_module: "crypto"
+  - match_object: "crypto"
+    match_method: "createSign"
+    match_arg_contains: "dsa"
+    algorithm: "DSA"
+    primitive: "signature"
+    weak_by_default: false
+    expected_module: "crypto"
+
+  # Node Web Crypto: imported from node:crypto as crypto/webcrypto.
+  - match_object: "crypto"
+    match_method: "digest"
+    match_arg_contains: "sha1"
+    algorithm: "SHA-1"
+    primitive: "hash"
+    weak_by_default: true
+    expected_modules: ["crypto", "webcrypto-global"]
+  - match_object: "crypto"
+    match_method: "digest"
+    match_arg_contains: "sha256"
+    algorithm: "SHA-256"
+    primitive: "hash"
+    weak_by_default: false
+    expected_modules: ["crypto", "webcrypto-global"]
+  - match_object: "crypto"
+    match_method: "generateKey"
+    match_arg_contains: "aes"
+    algorithm: "AES"
+    primitive: "symmetric-keygen"
+    weak_by_default: false
+    expected_modules: ["crypto", "webcrypto-global"]
+  - match_object: "crypto"
+    match_method: "generateKey"
+    match_arg_contains: "rsa"
+    algorithm: "RSA"
+    primitive: "asymmetric-keygen"
+    weak_by_default: false
+    expected_modules: ["crypto", "webcrypto-global"]
+  - match_object: "crypto"
+    match_method: "generateKey"
+    match_arg_contains: "ec"
+    algorithm: "ECC"
+    primitive: "asymmetric-keygen"
+    weak_by_default: false
+    expected_modules: ["crypto", "webcrypto-global"]

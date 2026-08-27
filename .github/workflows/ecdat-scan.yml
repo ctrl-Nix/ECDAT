@@ -1,2 +1,65 @@
-# .github/workflows/ecdat-scan.yml
-# TODO: Implement GitHub Actions CI/CD gate workflow
+name: ECDAT source scanner
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  source-scanner-regression:
+    name: Python 3.11 container regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build the submitted Python 3.11 image
+        run: docker build --tag ecdat-scanner:${{ github.sha }} .
+
+      - name: Run source scanner and risk-engine regression suite
+        run: >-
+          docker run --rm -e API_KEY=ci-test-key
+          -e REPORT_SYNC_REQUIRE_MTLS=false --entrypoint python ecdat-scanner:${{ github.sha }}
+          -m pytest -q --disable-warnings --maxfail=1
+
+      - name: Verify the live demo detects its declared policy violation
+        run: |
+          set +e
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/demos/ecdat-live-demo":/target:ro \
+            --entrypoint python ecdat-scanner:${{ github.sha }} \
+            -m scanner.cli /target --summary-only --source-context DEMO_ONLY --fail-on HIGH
+          result=$?
+          test "$result" -eq 2
+
+  dashboard-production-check:
+    name: Dashboard build and production dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install locked dashboard dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build dashboard for production
+        run: npm run build
+
+      - name: Fail on high or critical production dependency advisories
+        run: npm audit --omit=dev --audit-level=high

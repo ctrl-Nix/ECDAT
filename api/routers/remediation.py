@@ -180,6 +180,13 @@ def get_remediation_text(
 
     effective_provider, effective_key = detect_provider(api_key, provider)
 
+    # Remote LLM calls can disclose file paths and crypto usage to a third
+    # party. They are disabled unless an administrator explicitly enables the
+    # approved egress path. Prefer the deterministic local table for the
+    # air-gapped/offline product mode.
+    if effective_provider != "ollama" and not settings.ALLOW_REMOTE_REMEDIATION:
+        return fallback
+
     if not effective_key and effective_provider != "ollama":
         return fallback
 
@@ -312,34 +319,31 @@ async def health():
 async def get_remediation_for_finding(
     scan_id: int,
     finding_id: int,
-    api_key: Optional[str] = Query(None, description="Optional LLM API Key (Gemini, OpenAI, Grok, Groq, NVIDIA)"),
     provider: Optional[str] = Query(None, description="Optional provider ('gemini', 'openai', 'grok', 'groq', 'nvidia', 'ollama')"),
     model: Optional[str] = Query(None, description="Optional model identifier override"),
     db: Session = Depends(get_session),
     _key: str = Depends(get_api_key),
 ):
     """
-    Get remediation recommendation for a specific finding in a scan.
-    Queries the database finding row if available, otherwise falls back to defaults.
+    Get remediation recommendation for a specific finding in its owning scan.
+    A nonexistent finding or one belonging to another scan is not remediated
+    through this route, preventing misleading fallback data and object-ID
+    confusion across reports.
     """
     finding_row = crud.get_finding(db, finding_id)
-    if finding_row:
-        algorithm = finding_row.algorithm
-        file_path = finding_row.file
-        line_no = finding_row.line
-        severity = finding_row.risk_tier or finding_row.criticality
-    else:
-        # Fallback finding mock for direct testing
-        algorithm = "MD5"
-        file_path = "auth.py"
-        line_no = 42
-        severity = "HIGH"
+    if finding_row is None or finding_row.scan_id != scan_id:
+        raise HTTPException(status_code=404, detail="Finding not found in the requested scan")
+
+    algorithm = finding_row.algorithm
+    file_path = finding_row.file
+    line_no = finding_row.line
+    severity = finding_row.risk_tier or finding_row.criticality
 
     result = get_remediation_text(
         algorithm=algorithm,
         file=file_path,
         line=line_no,
-        api_key=api_key,
+        api_key=None,
         provider=provider,
         model=model,
     )
@@ -355,13 +359,15 @@ async def generate_remediation_direct(
     _key: str = Depends(get_api_key),
 ):
     """
-    Ad-hoc direct endpoint to generate remediation for any algorithm & snippet.
+    Ad-hoc direct endpoint to generate remediation from a server-configured
+    provider or the deterministic local table. It never accepts provider
+    credentials from an HTTP request.
     """
     result = get_remediation_text(
         algorithm=req.algorithm,
         file=req.file,
         line=req.line,
-        api_key=req.api_key,
+        api_key=None,
         provider=req.provider,
         model=req.model,
     )

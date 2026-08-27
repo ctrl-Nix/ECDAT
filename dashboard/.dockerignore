@@ -1,2 +1,12 @@
 ﻿node_modules/
 dist/
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.db
+*.sqlite*
+reports/
+coverage/
+npm-debug.log*
