@@ -52,6 +52,12 @@ def _make_engine(url: str) -> Engine:
     kwargs: dict = {"future": True}
     if url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
+        if ":memory:" in url:
+            # StaticPool keeps a single shared connection so that tables
+            # created by init_db() are visible to every subsequent query in
+            # the same process (critical for pytest with in-memory SQLite).
+            from sqlalchemy.pool import StaticPool
+            kwargs["poolclass"] = StaticPool
     else:
         kwargs["pool_pre_ping"] = True
         if "postgresql" in url:
