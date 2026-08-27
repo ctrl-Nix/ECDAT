@@ -61,11 +61,11 @@ class Settings(BaseSettings):
     GROK_BASE_URL: str = "https://api.x.ai/v1"
 
     GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "qwen/qwen3.8-27b"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
 
     NVIDIA_BUILD_API_KEY: Optional[str] = None
-    NVIDIA_MODEL: str = "meta/llama-3.1-8b-instruct"
+    NVIDIA_MODEL: str = "mistralai/mistral-7b-instruct-v0.3"
     NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
 
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
