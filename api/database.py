@@ -54,9 +54,14 @@ def _make_engine(url: str) -> Engine:
         connect_args["check_same_thread"] = False
     else:
         kwargs["pool_pre_ping"] = True
-        if "postgresql" in url and "sslmode=" not in url:
-            url += "?" if "?" not in url else "&"
-            url += "sslmode=require"
+        if "postgresql" in url:
+            # Do not silently add `sslmode=require`: a stock local Compose
+            # PostgreSQL container does not offer TLS. The deployment chooses
+            # an explicit policy: verify-full with a CA for remote databases,
+            # or disable only on a non-published private Docker network.
+            connect_args["sslmode"] = settings.POSTGRES_SSL_MODE
+            if settings.POSTGRES_SSL_ROOT_CERT:
+                connect_args["sslrootcert"] = str(settings.POSTGRES_SSL_ROOT_CERT)
     return create_engine(url, connect_args=connect_args, **kwargs)
 
 

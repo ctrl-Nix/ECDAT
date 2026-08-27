@@ -28,6 +28,14 @@ rules:
   # Ciphers
   - match_object: "Cipher"
     match_method: "getInstance"
+    match_arg_contains: "DESede"
+    algorithm: "3DES"
+    primitive: "block-cipher"
+    weak_by_default: true
+    expected_import: "javax.crypto.Cipher"
+
+  - match_object: "Cipher"
+    match_method: "getInstance"
     match_arg_contains: "DES"
     algorithm: "DES"
     primitive: "block-cipher"

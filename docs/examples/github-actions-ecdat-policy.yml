@@ -1,0 +1,28 @@
+name: ECDAT policy gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ecdat-source-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the approved ECDAT scanner image
+        run: docker build --tag ecdat-scanner:${{ github.sha }} .
+      - name: Gate on high-confidence Critical findings
+        run: >-
+          docker run --rm
+          -v ${{ github.workspace }}:/target:ro
+          --entrypoint python ecdat-scanner:${{ github.sha }}
+          -m scanner.cli /target --summary-only --fail-on CRITICAL
+
+      # Do not upload full source findings by default. If an organization
+      # authorizes a restricted artifact, use --redact-paths and a short
+      # retention period, and never include signing/mTLS credentials in CI.

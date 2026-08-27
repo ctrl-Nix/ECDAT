@@ -21,7 +21,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 import db.crud as crud
-from db.models import Finding, Scan
+from db.models import Finding, RiskAssessment, Scan
 
 # ---------------------------------------------------------------------------
 # CycloneDX 1.6 constants
@@ -101,7 +101,8 @@ def generate_cbom(session: Session, scan_id: int) -> dict[str, Any] | None:
     findings: list[Finding] = crud.get_findings_for_scan(session, scan_id)
     summary: dict[str, int] = crud.get_risk_summary(session, scan_id)
 
-    components = [_finding_to_component(f) for f in findings]
+    assessments = crud.get_risk_assessments_for_scan(session, scan_id)
+    components = [_finding_to_component(f, assessments.get(f.id)) for f in findings]
 
     return {
         "bomFormat": CYCLONEDX_FORMAT,
@@ -113,6 +114,7 @@ def generate_cbom(session: Session, scan_id: int) -> dict[str, Any] | None:
         "externalReferences": [],
         # ECDAT extension — not a CycloneDX field, namespaced to avoid collision
         "x-ecdat-risk-summary": summary,
+        "x-ecdat-report-provenance": _report_provenance(scan),
     }
 
 
@@ -143,7 +145,9 @@ def _build_metadata(scan: Scan) -> dict[str, Any]:
     }
 
 
-def _finding_to_component(finding: Finding) -> dict[str, Any]:
+def _finding_to_component(
+    finding: Finding, assessment: RiskAssessment | None = None
+) -> dict[str, Any]:
     """
     Transform one Finding ORM row → one CycloneDX 1.6 cryptography-asset component.
 
@@ -184,6 +188,26 @@ def _finding_to_component(finding: Finding) -> dict[str, Any]:
     ]
     if finding.risk_reason:
         properties.append({"name": "ecdat:risk_reason", "value": finding.risk_reason})
+    properties.append({"name": "ecdat:source_context", "value": finding.source_context})
+
+    if assessment:
+        properties.extend([
+            {"name": "ecdat:risk_model_version", "value": assessment.risk_model_version},
+            {"name": "ecdat:classical_broken", "value": str(assessment.classical_broken).lower()},
+            {"name": "ecdat:quantum_vulnerable", "value": str(assessment.quantum_vulnerable).lower()},
+            {"name": "ecdat:hndl_exposure", "value": assessment.hndl_exposure},
+        ])
+        optional_properties = {
+            "ecdat:recommended_replacement": assessment.recommended_replacement,
+            "ecdat:recommendation_type": assessment.recommendation_type,
+            "ecdat:migration_effort_days": assessment.migration_effort_days,
+            "ecdat:data_shelf_life_years": assessment.data_shelf_life_years,
+            "ecdat:quantum_threat_horizon_years": assessment.quantum_threat_horizon_years,
+            "ecdat:assumption_source": assessment.assumption_source,
+        }
+        for name, value in optional_properties.items():
+            if value is not None:
+                properties.append({"name": name, "value": str(value)})
 
     # Recommended migration (PQC direction from risk_engine → stored in DB via save_findings)
     # We surface it as a property since CycloneDX has no migration field yet.
@@ -213,4 +237,20 @@ def _infer_version(algorithm: str, key_size: int | None) -> str:
     if key_size:
         return f"{algorithm}-{key_size}"
     return algorithm
+
+
+def _report_provenance(scan: Scan) -> dict[str, Any]:
+    """Return custody metadata when this scan came from a signed local bundle."""
+    report = scan.report
+    if report is None:
+        return {"origin": "local-api", "integrity": "not-signed-bundle"}
+    return {
+        "origin": "offline-agent-signed-bundle",
+        "report_id": report.report_id,
+        "agent_id": report.agent_id,
+        "organization_id": report.organization_id,
+        "bundle_digest": report.bundle_digest,
+        "signature_algorithm": report.signature_algorithm,
+        "classification": report.classification,
+    }
 

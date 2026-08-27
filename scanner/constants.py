@@ -23,9 +23,18 @@ SKIP_DIRS = {
 }
 
 
-def _should_skip(path: Path) -> bool:
-    """Check if path should be skipped during scanning."""
-    for part in path.parts:
+def _should_skip(path: Path, scan_root: Path | None = None) -> bool:
+    """Check whether a path lies below a generated or dependency directory.
+
+    The caller-selected root is not itself an artifact. This distinction keeps
+    normal Docker mounts such as ``/target`` scanable while still excluding a
+    nested ``target/`` build directory in a Java repository.
+    """
+    try:
+        parts = path.resolve().relative_to(scan_root.resolve()).parts if scan_root else path.parts
+    except (ValueError, OSError):
+        parts = path.parts
+    for part in parts:
         if part in SKIP_DIRS:
             return True
     return False

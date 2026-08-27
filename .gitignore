@@ -1,5 +1,8 @@
 # Environment variables
 .env
+deploy/tls/*.crt
+deploy/tls/*.key
+deploy/tls/*.pem
 
 # Python
 __pycache__/

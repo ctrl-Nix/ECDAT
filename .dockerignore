@@ -4,8 +4,16 @@
 .gitignore
 .env
 node_modules/
+**/node_modules/
+dashboard/node_modules/
 dist/
 build/
 *.log
+*.db
+*.sqlite
+*.sqlite3
+*.ecdat.json
+reports/
+workspace/
 .vscode/
 .DS_Store

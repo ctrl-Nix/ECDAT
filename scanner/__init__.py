@@ -1,6 +1,12 @@
-from scanner.cli import main as scan_cli
 from scanner.finding import Finding
 from scanner.python_engine import scan_file as scan_python
+
+
+def scan_cli(*args, **kwargs):
+    """Run the CLI lazily so ``python -m scanner.cli`` has no re-import warning."""
+    from scanner.cli import main
+
+    return main(*args, **kwargs)
 
 try:
     from scanner.multilang_engine import scan_file as scan_multilang

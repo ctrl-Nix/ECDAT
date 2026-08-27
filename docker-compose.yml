@@ -1,23 +1,28 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: cbom-postgres
     restart: unless-stopped
     env_file: .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      # Existing-database upgrades run this migration explicitly; this direct
+      # mount makes new PostgreSQL volumes apply it in init order as well.
+      - ./db/migrations/001_secure_reporting.sql:/docker-entrypoint-initdb.d/02_secure_reporting.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    networks: [data_net]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp, /var/run/postgresql]
 
   backend:
     build:
@@ -25,21 +30,65 @@ services:
       dockerfile: ./Dockerfile
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "8000:8000"
+    environment:
+      POSTGRES_HOST: db
+      # The Compose database is accessible only on data_net. This intentionally
+      # uses no TLS inside that isolated host-local network; use verify-full and
+      # a CA for a remote managed PostgreSQL service.
+      POSTGRES_SSL_MODE: disable
+      ENABLE_LOCAL_SCAN_API: "false"
+      REPORT_SYNC_REQUIRE_MTLS: "true"
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    networks: [data_net, app_net]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
 
   dashboard:
     build:
       context: ./dashboard
     restart: unless-stopped
-    ports:
-      - "5173:5173"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks: [app_net]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run, /tmp]
+
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      dashboard:
+        condition: service_started
+    ports:
+      - "${ECDAT_HTTPS_PORT:-8443}:8443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Operators must supply organization-issued TLS material outside source
+      # control. `agent-ca.crt` trusts scanning-agent client certificates only.
+      - ./deploy/tls/server.crt:/etc/nginx/tls/server.crt:ro
+      - ./deploy/tls/server.key:/etc/nginx/tls/server.key:ro
+      - ./deploy/tls/agent-ca.crt:/etc/nginx/mtls-ca/agent-ca.crt:ro
+    networks: [app_net]
+    user: "101:101"
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp, /var/cache/nginx, /var/run]
+
+networks:
+  data_net:
+    internal: true
+  app_net:
+    internal: true
 
 volumes:
   pgdata:

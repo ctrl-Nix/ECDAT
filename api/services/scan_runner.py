@@ -27,6 +27,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 import db.crud as crud
+from api.core.config import settings
 from api.services.risk_engine import score_findings
 
 log = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ def run_scan(
     target_path: str,
     repo_name: str | None = None,
     repo_url: str | None = None,
+    scan_id: int | None = None,
 ) -> dict[str, Any]:
     """
     Execute a full scan on *target_path* and persist results.
@@ -53,6 +55,8 @@ def run_scan(
         target_path: Absolute or relative path to the directory/file to scan.
         repo_name:   Human-readable repo name (defaults to path basename).
         repo_url:    Optional VCS URL for deduplication.
+        scan_id:     Existing queued scan to execute.  When omitted, creates a
+                     new repository/scan record for direct service usage.
 
     Returns:
         Dict with keys: scan_id, status, finding_count, summary, errors.
@@ -62,14 +66,23 @@ def run_scan(
     """
     target = _validate_path(target_path)
 
-    # 1. Ensure repository row exists (deduped by url/name).
-    name = repo_name or target.name or target.parent.name
-    repo = crud.get_or_create_repository(session, name=name, url=repo_url)
-    session.flush()
+    # 1. Use the queued scan record when the API has already created one.
+    # This is the normal asynchronous API path: the ID returned by POST
+    # /scans must be the same ID that later receives findings and completion.
+    if scan_id is not None:
+        scan = crud.get_scan(session, scan_id)
+        if scan is None:
+            raise ValueError(f"Queued scan {scan_id} does not exist")
+    else:
+        # Direct service callers still receive the original convenient
+        # behavior: repository deduplication followed by a new scan record.
+        name = repo_name or target.name or target.parent.name
+        repo = crud.get_or_create_repository(session, name=name, url=repo_url)
+        session.flush()
+        scan = crud.start_scan(session, repo_id=repo.id, status="pending")
+        scan_id = scan.id
 
-    # 2. Open scan row → pending, then flip to running immediately.
-    scan = crud.start_scan(session, repo_id=repo.id, status="pending")
-    scan_id = scan.id
+    # 2. Mark the one authoritative scan record as running immediately.
     session.flush()
     scan.status = "running"
     session.flush()
@@ -81,8 +94,21 @@ def run_scan(
         # 3. Invoke scanner subprocess.
         raw_findings = _invoke_scanner(target, scan_id, errors)
 
-        # 4. Score all findings through the deterministic risk engine.
-        scored = score_findings(raw_findings) if raw_findings else []
+        # 4. Score only evidence-backed findings.  The scanner itself emits
+        # high-confidence findings only, but retaining this guard prevents raw
+        # or future scanner adapters from turning ambiguous matches into report
+        # assertions.
+        verified_findings = [
+            finding for finding in raw_findings
+            if finding.get("confidence") == "high"
+        ]
+        if len(verified_findings) != len(raw_findings):
+            log.info(
+                "Scan %d withheld %d non-high-confidence finding(s) from risk scoring",
+                scan_id,
+                len(raw_findings) - len(verified_findings),
+            )
+        scored = score_findings(verified_findings) if verified_findings else []
 
         # 5. Bulk-persist scored findings.
         if scored:
@@ -109,7 +135,7 @@ def run_scan(
     )
 
     return {
-        "scan_id": scan_id,
+        "scan_id": scan.id,
         "status": status,
         "finding_count": len(scored),
         "summary": summary,
@@ -125,13 +151,21 @@ def _validate_path(target_path: str) -> Path:
     """
     Resolve and validate the target path.
 
-    Security: resolves symlinks, blocks traversal to filesystem root parents,
-    and raises ValueError for non-existent paths.
+    Security: resolves symlinks and, when the optional server-local scan API is
+    enabled, requires the target to remain within SCAN_WORKSPACE_ROOT. The
+    default product workflow scans locally with the CLI, not through this API.
     """
     try:
         resolved = Path(target_path).resolve(strict=True)
     except (FileNotFoundError, OSError) as exc:
         raise ValueError(f"Target path does not exist: {target_path!r}") from exc
+    if settings.SCAN_WORKSPACE_ROOT is not None:
+        try:
+            root = settings.SCAN_WORKSPACE_ROOT.resolve(strict=True)
+        except (FileNotFoundError, OSError) as exc:
+            raise ValueError("Configured scan workspace root does not exist") from exc
+        if resolved != root and root not in resolved.parents:
+            raise ValueError("Target path is outside the configured scan workspace root")
     return resolved
 
 
@@ -141,7 +175,7 @@ def _invoke_scanner(
     errors: list[str],
 ) -> list[dict[str, Any]]:
     """
-    Run `python -m scanner.cli <target> --json` as a subprocess.
+    Run `python -m scanner.cli <target>` as a subprocess.
 
     Returns a list of raw finding dicts (keys match scanner.finding.Finding).
     On scanner error, logs and appends to *errors*; returns whatever was parsed.
@@ -152,7 +186,6 @@ def _invoke_scanner(
         sys.executable,   # same Python interpreter as the API process
         "-m", "scanner.cli",
         str(target),
-        "--json",
     ]
 
     log.debug("Scan %d invoking: %s", scan_id, cmd)
@@ -251,4 +284,3 @@ def _parse_scanner_output(
         )
 
     return findings
-

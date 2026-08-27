@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 import db.crud as crud
 from api.core.security import get_api_key
+from api.core.config import settings
 from api.database import get_session
 from api.models import FindingOut, RiskSummary, ScanOut, ScanWithFindings
 from api.services.scan_runner import run_scan
@@ -96,6 +97,7 @@ def _run_scan_background(
                 target_path=target_path,
                 repo_name=repo_name,
                 repo_url=repo_url,
+                scan_id=scan_id,
             )
             session.commit()
             log.info("Background scan %d finished: %s", scan_id, result["status"])
@@ -126,6 +128,11 @@ def create_scan(
     _key: Annotated[str, Depends(get_api_key)],
 ) -> ScanCreateResponse:
     """POST /scans — create and queue a scan."""
+    if not settings.ENABLE_LOCAL_SCAN_API:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Server-local scan execution is disabled. Run the offline CLI and sync a signed report bundle.",
+        )
     # Validate path eagerly so we 422 before returning 202
     from api.services.scan_runner import _validate_path
     try:
@@ -220,4 +227,3 @@ def get_scan(
         "findings": findings,
         "summary": summary,
     }
-

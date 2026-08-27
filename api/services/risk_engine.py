@@ -58,6 +58,19 @@ RISK_RULES: dict[str, dict[str, Any]] = {
             "demonstrated at ~$45k cloud cost. Replace with SHA-256 immediately."
         ),
     },
+    "SHA-224": {
+        "tier": "LOW",
+        "classical_broken": False,
+        "classical_break_detail": None,
+        "quantum_vulnerable": False,
+        "quantum_break_detail": "Grover's algorithm halves effective bits to 112 — still secure for ordinary use",
+        "recommended_replacement": None,
+        "recommendation_type": None,
+        "migration_effort_days": 0,
+        "data_shelf_life_years": None,
+        "nist_quantum_security_level": 112,
+        "risk_reason": None,
+    },
     "SHA-256": {
         "tier": "LOW",
         "classical_broken": False,
@@ -186,8 +199,8 @@ RISK_RULES: dict[str, dict[str, Any]] = {
         "nist_quantum_security_level": 0,
         "risk_reason": (
             "RSA is quantum-vulnerable — Shor's algorithm breaks it regardless of key size. "
-            "With a 30-day migration and 10-year data shelf-life, urgency exceeds the "
-            "10-15 year quantum threat horizon. Migrate to ML-KEM-768 (NIST PQC standard)."
+            "Confirm the data shelf life and migration effort before setting a Mosca urgency. "
+            "Plan a compatible hybrid migration to ML-KEM-768 for key establishment."
         ),
     },
     "ECC": {
@@ -320,12 +333,14 @@ TIER_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "UNSCORED": 4}
 
 # Mosca's theorem — NIST consensus quantum threat horizon
 QUANTUM_THREAT_HORIZON_YEARS = 12
+RISK_MODEL_VERSION = "2026.1"
 
 
 def _normalize_algorithm(algorithm: str) -> str:
     """Normalize algorithm string to canonical form matching RISK_RULES keys."""
     mapping = {
         "sha1": "SHA-1", "sha-1": "SHA-1",
+        "sha224": "SHA-224", "sha-224": "SHA-224",
         "md5": "MD5",
         "sha256": "SHA-256", "sha-256": "SHA-256",
         "sha384": "SHA-384", "sha-384": "SHA-384",
@@ -391,7 +406,9 @@ def _mosca_urgency(rule: dict[str, Any]) -> bool:
     """
     if not rule.get("quantum_vulnerable"):
         return False
-    shelf = rule.get("data_shelf_life_years") or 0
+    shelf = rule.get("data_shelf_life_years")
+    if shelf is None:
+        return False
     effort_years = (rule.get("migration_effort_days") or 0) / 365
     return (shelf + effort_years) > QUANTUM_THREAT_HORIZON_YEARS
 
@@ -417,16 +434,47 @@ def score_finding(finding: dict[str, Any]) -> dict[str, Any]:
     # Apply key-size override for RSA/ECC
     override = _apply_key_size_override(canonical, key_size, rule)
     effective = {**rule, **override}
+    supplied_shelf_life = finding.get("data_shelf_life_years")
+    if supplied_shelf_life is not None:
+        try:
+            supplied_shelf_life = float(supplied_shelf_life)
+        except (TypeError, ValueError):
+            supplied_shelf_life = None
+    if supplied_shelf_life is not None and supplied_shelf_life >= 0:
+        effective["data_shelf_life_years"] = supplied_shelf_life
 
     tier = effective.get("tier", "UNSCORED").upper()
     risk_reason = effective.get("risk_reason")
 
-    # Mosca urgency note for quantum-vulnerable, unoverridden HIGH findings
+    # Mosca urgency is calculated only from a concrete business shelf-life
+    # assumption. Rule defaults describe a planning baseline; they are not
+    # evidence that a particular application's data remains sensitive.
+    mosca_urgent: bool | None = None
+    has_explicit_shelf_life = supplied_shelf_life is not None
     if not override and effective.get("quantum_vulnerable") and tier == "HIGH":
-        if _mosca_urgency(effective):
+        if has_explicit_shelf_life:
+            mosca_urgent = _mosca_urgency(effective)
+        if mosca_urgent:
             risk_reason = (risk_reason or "") + (
                 " Mosca urgency: data shelf-life + migration effort exceeds quantum threat horizon."
             )
+
+    if not effective.get("quantum_vulnerable"):
+        hndl_exposure = "NOT_APPLICABLE"
+    elif not has_explicit_shelf_life:
+        hndl_exposure = "UNKNOWN"
+    elif mosca_urgent:
+        hndl_exposure = "HIGH"
+    else:
+        hndl_exposure = "ASSESSMENT_REQUIRED"
+
+    source_context = str(finding.get("source_context") or "SOURCE").upper()
+    if source_context in {"TEST_ONLY", "DEMO_ONLY"}:
+        context_note = (
+            f" Observed in {source_context.lower().replace('_', ' ')}; "
+            "verify deployed-path reachability before treating this as production exposure."
+        )
+        risk_reason = (risk_reason or "Static crypto inventory finding.") + context_note
 
     criticality = get_criticality(file_path)
 
@@ -438,6 +486,14 @@ def score_finding(finding: dict[str, Any]) -> dict[str, Any]:
         "quantum_vulnerable": effective.get("quantum_vulnerable", False),
         "classical_broken": effective.get("classical_broken", False),
         "recommended_replacement": effective.get("recommended_replacement"),
+        "recommendation_type": effective.get("recommendation_type"),
+        "migration_effort_days": effective.get("migration_effort_days"),
+        "data_shelf_life_years": effective.get("data_shelf_life_years"),
+        "quantum_threat_horizon_years": QUANTUM_THREAT_HORIZON_YEARS,
+        "hndl_exposure": hndl_exposure,
+        "assumption_source": finding.get("assumption_source"),
+        "risk_model_version": RISK_MODEL_VERSION,
+        "source_context": source_context,
     })
     return enriched
 
@@ -455,4 +511,3 @@ def score_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     scored = [score_finding(f) for f in findings]
     scored.sort(key=lambda f: TIER_ORDER.get(f.get("risk_tier", "UNSCORED"), 99))
     return scored
-

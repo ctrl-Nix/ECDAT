@@ -76,10 +76,18 @@ logger = logging.getLogger(__name__)
 EXT_TO_LANG: Dict[str, str] = {
     ".java": "java",
     ".js": "javascript",
+    ".cjs": "javascript",
+    ".mjs": "javascript",
     ".ts": "typescript",   # TypeScript uses the same call-expression grammar as JS
+    ".cts": "typescript",
+    ".mts": "typescript",
     ".jsx": "javascript",  # JSX call syntax is identical for our purposes
     ".tsx": "typescript",
 }
+
+# The rules and reported language for TSX are TypeScript, but it requires the
+# dedicated TSX grammar to parse JSX syntax correctly.
+_PARSER_LANGUAGE_BY_EXTENSION = {".tsx": "tsx"}
 
 # Default rules directory — resolved relative to this module so that
 # ``scanner/cli.py`` does not need to hard-code a path.
@@ -95,7 +103,7 @@ _CALL_QUERIES: Dict[str, str] = {
     "java": """
         [
           (method_invocation
-            object: (identifier) @object
+            object: (_) @object
             name: (identifier) @method
             arguments: (argument_list) @args)
           (method_invocation
@@ -107,7 +115,7 @@ _CALL_QUERIES: Dict[str, str] = {
         [
           (call_expression
             function: (member_expression
-              object: (identifier) @object
+              object: (_) @object
               property: (property_identifier) @method)
             arguments: (arguments) @args)
           (call_expression
@@ -119,7 +127,7 @@ _CALL_QUERIES: Dict[str, str] = {
         [
           (call_expression
             function: (member_expression
-              object: (identifier) @object
+              object: (_) @object
               property: (property_identifier) @method)
             arguments: (arguments) @args)
           (call_expression
@@ -134,11 +142,7 @@ _CALL_QUERIES: Dict[str, str] = {
 # already does via ``ast.Import`` / ``ast.ImportFrom``.
 _IMPORT_QUERIES: Dict[str, str] = {
     "java": """
-        [
-          (import_declaration) @decl
-          (import_declaration
-            (modifiers (static)) @static_decl)
-        ] @decl
+        (import_declaration) @decl
     """,
     "javascript": """
         [
@@ -182,6 +186,57 @@ _IMPORT_QUERIES: Dict[str, str] = {
 
 _PARSER_CACHE: Dict[str, object] = {}
 _LANGUAGE_CACHE: Dict[str, object] = {}
+
+
+def _first_capture(captures: dict, name: str):
+    """Return one node from a tree-sitter query capture.
+
+    ``tree_sitter.Query.matches`` returns a single ``Node`` per capture with
+    the project's supported tree-sitter 0.21.x API.  Some other bindings and
+    newer adapters return a list or tuple of nodes.  Normalizing here keeps
+    the import and call-query paths independent of that representation.
+    """
+    value = captures.get(name)
+    if isinstance(value, (list, tuple)):
+        return value[0] if value else None
+    return value
+
+
+def _module_from_expression(node, source: bytes) -> Optional[str]:
+    """Return a literal module passed to an inline ``require`` or ``import``.
+
+    This permits unaliased Node patterns such as
+    ``require("node:crypto").createHash("sha256")`` without relying on a
+    heuristic method-name match. Dynamic module specifiers intentionally do
+    not resolve here and therefore cannot produce a reportable finding.
+    """
+    if node is None:
+        return None
+    if node.type == "call_expression":
+        function = node.child_by_field_name("function")
+        args = node.child_by_field_name("arguments")
+        if function is not None and args is not None:
+            function_text = source[function.start_byte:function.end_byte].decode("utf-8", "ignore")
+            if function_text in {"require", "import"}:
+                module = _first_string_arg(args, source)
+                if module:
+                    return module.replace("node:", "")
+    for child in node.children:
+        module = _module_from_expression(child, source)
+        if module:
+            return module
+    return None
+
+
+def _explicit_webcrypto_global(object_name: str) -> bool:
+    """Recognize only unambiguous browser Web Crypto global-object access.
+
+    A plain ``crypto`` identifier can be a local application helper, so it is
+    intentionally not trusted. ``window.crypto`` and ``globalThis.crypto``
+    are explicit platform globals and can be safely associated with Web
+    Crypto's ``subtle`` API for static evidence purposes.
+    """
+    return object_name.startswith("window.crypto.") or object_name.startswith("globalThis.crypto.")
 
 
 def _get_parser(language: str) -> object:
@@ -257,11 +312,10 @@ def _resolve_java_imports(tree, source: bytes) -> tuple[Dict[str, str], Dict[str
     static_imports: Dict[str, str] = {}
 
     for _, captures in query.matches(tree.root_node):
-        decl_nodes = captures.get("decl")
-        if not decl_nodes:
+        decl_node = _first_capture(captures, "decl")
+        if decl_node is None:
             continue
 
-        decl_node = decl_nodes[0]
         raw = source[decl_node.start_byte:decl_node.end_byte].decode("utf-8", "ignore")
         stripped = raw.strip()
         if stripped.startswith("import"):
@@ -292,52 +346,79 @@ def _resolve_java_imports(tree, source: bytes) -> tuple[Dict[str, str], Dict[str
     return imports, static_imports
 
 
-def _resolve_js_bindings(tree, source: bytes) -> tuple[Dict[str, str], Dict[str, str]]:
+def _resolve_js_bindings(
+    tree, source: bytes, language: str = "javascript"
+) -> tuple[Dict[str, str], Dict[str, str]]:
     """Map local variable name → module specifier.
 
     Handles CommonJS, ES6 default imports, and ES6 named imports.
 
     Returns:
         bindings: Maps variable/function name → module name
-        static_imports: Maps imported function name → module name (for ES6 named imports)
+        static_imports: Maps local callable name → ``module::imported_name``
+            for destructured CommonJS and named ESM imports.
     """
-    lang = _get_language("javascript")
-    query = lang.query(_IMPORT_QUERIES["javascript"])
     bindings: Dict[str, str] = {}
     static_imports: Dict[str, str] = {}
 
-    for _, captures in query.matches(tree.root_node):
-        var_nodes = captures.get("varname")
-        mod_nodes = captures.get("modname")
-        fn_nodes = captures.get("fn")
+    def text(node) -> str:
+        return source[node.start_byte:node.end_byte].decode("utf-8", "ignore")
 
-        if not var_nodes or not mod_nodes:
-            continue
+    def descendants(node):
+        yield node
+        for child in node.children:
+            yield from descendants(child)
 
-        var_node = var_nodes[0]
-        mod_node = mod_nodes[0]
-        fn_node = fn_nodes[0] if fn_nodes else None
+    def bind_destructured(pattern, module: str) -> None:
+        for child in pattern.children:
+            if child.type == "shorthand_property_identifier_pattern":
+                imported_name = text(child)
+                static_imports[imported_name] = f"{module}::{imported_name}"
+                bindings[imported_name] = module
+            elif child.type == "pair_pattern":
+                identifiers = [
+                    item for item in child.children
+                    if item.type in {"identifier", "property_identifier"}
+                ]
+                if identifiers:
+                    local_name = text(identifiers[-1])
+                    static_imports[local_name] = f"{module}::{text(identifiers[0])}"
+                    bindings[local_name] = module
 
-        varname = source[var_node.start_byte:var_node.end_byte].decode("utf-8", "ignore")
-        modname = _extract_string_text(mod_node, source)
-        if not modname:
-            continue
-        modname = modname.replace("node:", "")
-
-        # For CommonJS, ensure the call is actually ``require()``.
-        if fn_node is not None:
-            fn_text = source[fn_node.start_byte:fn_node.end_byte].decode("utf-8", "ignore")
-            if fn_text != "require":
+    for node in descendants(tree.root_node):
+        if node.type == "variable_declarator":
+            name = node.child_by_field_name("name")
+            value = node.child_by_field_name("value")
+            module = _module_from_expression(value, source)
+            if name is None or not module:
                 continue
-            # CommonJS: const crypto = require("crypto")
-            bindings[varname] = modname
-        else:
-            # ES6 imports: import crypto from "crypto" or import { createHash } from "crypto"
-            # For default imports, varname is the alias (e.g., "crypto")
-            # For named imports, varname is the imported function (e.g., "createHash")
-            # Both map to the module name
-            bindings[varname] = modname
-            static_imports[varname] = modname
+            if name.type == "identifier":
+                bindings[text(name)] = module
+            elif name.type == "object_pattern":
+                bind_destructured(name, module)
+
+        elif node.type == "import_statement":
+            module_node = next((child for child in node.children if child.type == "string"), None)
+            clause = next((child for child in node.children if child.type == "import_clause"), None)
+            if module_node is None or clause is None:
+                continue
+            module = _extract_string_text(module_node, source).replace("node:", "")
+            for child in clause.children:
+                if child.type == "identifier":
+                    bindings[text(child)] = module
+                elif child.type == "namespace_import":
+                    local = next((item for item in child.children if item.type == "identifier"), None)
+                    if local is not None:
+                        bindings[text(local)] = module
+                elif child.type == "named_imports":
+                    for specifier in child.children:
+                        if specifier.type != "import_specifier":
+                            continue
+                        identifiers = [item for item in specifier.children if item.type == "identifier"]
+                        if identifiers:
+                            local_name = text(identifiers[-1])
+                            static_imports[local_name] = f"{module}::{text(identifiers[0])}"
+                            bindings[local_name] = module
 
     return bindings, static_imports
 
@@ -360,13 +441,40 @@ def _extract_string_text(node, source: bytes) -> Optional[str]:
 
 
 def _first_string_arg(args_node, source: bytes) -> Optional[str]:
-    """Return the text of the first string literal inside an argument list."""
+    """Return a literal algorithm string from a call's first argument shape.
+
+    Handles both ordinary string arguments and the ``{name: "AES-GCM"}``
+    object convention used by Node and browser Web Crypto APIs. Computed and
+    variable algorithm values deliberately remain unresolved.
+    """
     if args_node is None:
         return None
     for child in args_node.children:
         if "string" in child.type:
             return _extract_string_text(child, source)
+        if child.type == "object":
+            for pair in child.children:
+                if pair.type != "pair":
+                    continue
+                key_node = pair.child_by_field_name("key")
+                value_node = pair.child_by_field_name("value")
+                if key_node is None or value_node is None:
+                    continue
+                key_text = source[key_node.start_byte:key_node.end_byte].decode("utf-8", "ignore")
+                if key_text == "name" and "string" in value_node.type:
+                    return _extract_string_text(value_node, source)
     return None
+
+
+def _algorithm_token_matches(expected: str, actual: str) -> bool:
+    """Compare algorithm tokens without case or punctuation differences.
+
+    Provider APIs commonly spell the same algorithm as ``SHA-1``, ``sha1``,
+    or ``SHA_1``. The scanner treats these as the same explicit literal but
+    does not evaluate computed values or broaden matching beyond substrings.
+    """
+    normalize = lambda value: "".join(char for char in value.lower() if char.isalnum())
+    return normalize(expected) in normalize(actual)
 
 
 def _extract_key_size(args_node, source: bytes) -> Optional[int]:
@@ -414,6 +522,34 @@ def _extract_key_size(args_node, source: bytes) -> Optional[int]:
     return None
 
 
+def _extract_chained_key_size(call_node, source: bytes) -> Optional[int]:
+    """Read ``.initialize(<bits>)`` immediately chained from a Java factory call.
+
+    Java represents ``KeyPairGenerator.getInstance("RSA").initialize(2048)``
+    as nested ``method_invocation`` nodes.  The scanner matches the inner
+    ``getInstance`` call because that is where the algorithm literal lives,
+    while the key size belongs to its outer parent.  This helper follows that
+    one explicit chain shape and delegates numeric extraction to the shared
+    argument parser.
+    """
+    parent = call_node.parent
+    if parent is None or parent.type != "method_invocation":
+        return None
+
+    chained_object = parent.child_by_field_name("object")
+    method_node = parent.child_by_field_name("name")
+    args_node = parent.child_by_field_name("arguments")
+    if chained_object is None or method_node is None:
+        return None
+    if chained_object.start_byte != call_node.start_byte or chained_object.end_byte != call_node.end_byte:
+        return None
+
+    method_name = source[method_node.start_byte:method_node.end_byte].decode("utf-8", "ignore")
+    if method_name != "initialize":
+        return None
+    return _extract_key_size(args_node, source)
+
+
 # ---------------------------------------------------------------------------
 # Core scanning logic
 # ---------------------------------------------------------------------------
@@ -434,12 +570,23 @@ def scan_file(path: Path, rules_by_lang: Dict[str, List[dict]]) -> List[Finding]
         Findings sorted by line number.
     """
     lang_key = EXT_TO_LANG.get(path.suffix)
-    if lang_key is None or lang_key not in rules_by_lang:
+    if lang_key is None:
         return []
 
-    # Resolve the actual tree-sitter language identifier.
-    # TypeScript uses the TypeScript parser but may reuse JS rules.
-    ts_language = "typescript" if lang_key == "typescript" else lang_key
+    # TypeScript deliberately reuses the JavaScript detection rules.  The
+    # parser/query grammar remains TypeScript, while crypto API semantics are
+    # shared with Node.js JavaScript.
+    rules = rules_by_lang.get(lang_key) or rules_by_lang.get("javascript", [])
+    if not rules:
+        return []
+
+    # Resolve the actual tree-sitter parser grammar. TypeScript shares the
+    # JavaScript rule set; TSX keeps that reporting contract but needs its own
+    # grammar to understand JSX expressions.
+    ts_language = _PARSER_LANGUAGE_BY_EXTENSION.get(
+        path.suffix,
+        "typescript" if lang_key == "typescript" else lang_key,
+    )
 
     try:
         source = path.read_bytes()
@@ -455,8 +602,7 @@ def scan_file(path: Path, rules_by_lang: Dict[str, List[dict]]) -> List[Finding]
     elif lang_key in ("javascript", "typescript"):
         bindings, static_imports = _resolve_js_bindings(tree, source)
     else:
-        bindings = _resolve_js_bindings(tree, source)
-        static_imports = {}
+        bindings, static_imports = _resolve_js_bindings(tree, source)
 
     # Run the call-expression query.
     ts_lang = _get_language(ts_language)
@@ -471,61 +617,80 @@ def scan_file(path: Path, rules_by_lang: Dict[str, List[dict]]) -> List[Finding]
     findings: List[Finding] = []
 
     for _, captures in matches:
-        call_nodes = captures.get("call")
-        object_nodes = captures.get("object")
-        method_nodes = captures.get("method")
-        args_nodes = captures.get("args")
+        call_node = _first_capture(captures, "call")
+        object_node = _first_capture(captures, "object")
+        method_node = _first_capture(captures, "method")
+        args_node = _first_capture(captures, "args")
 
-        if not (call_nodes and method_nodes):
+        if call_node is None or method_node is None:
             continue
-
-        call_node = call_nodes[0]
-        method_node = method_nodes[0]
-        args_node = args_nodes[0] if args_nodes else None
-        object_node = object_nodes[0] if object_nodes else None
 
         method_name = source[method_node.start_byte:method_node.end_byte].decode("utf-8", "ignore")
         arg_text = _first_string_arg(args_node, source)
 
-        # For static calls, object_name is empty; try to resolve via static imports
+        # For static calls, object_name is empty; try to resolve via static imports.
+        # ``source_module`` is the import-backed origin used to prevent generic
+        # lookalike methods from being reported as crypto usage.
         object_name = ""
+        source_module = None
+        imported_method = method_name
         if object_node:
             object_name = source[object_node.start_byte:object_node.end_byte].decode("utf-8", "ignore")
+            source_module = bindings.get(object_name)
+            if source_module is None:
+                source_module = bindings.get(object_name.split(".", 1)[0])
+            if source_module is None:
+                source_module = _module_from_expression(object_node, source)
+            if source_module is None and _explicit_webcrypto_global(object_name):
+                source_module = "webcrypto-global"
         elif method_name in static_imports:
-            # Static import: use the class name from the import
-            object_name = static_imports[method_name]
+            static_target = static_imports[method_name]
+            if "::" in static_target:
+                source_module, imported_method = static_target.split("::", 1)
+            else:
+                # Java static imports retain their class name in this map.
+                object_name = static_target
+                source_module = bindings.get(object_name) or static_target
 
-        for rule in rules_by_lang[lang_key]:
-            if rule.get("match_object") != object_name:
+        for rule in rules:
+            if rule.get("match_method") != imported_method:
                 continue
-            if rule.get("match_method") != method_name:
+
+            expected_modules = rule.get("expected_modules") or [
+                rule.get("expected_import") or rule.get("expected_module")
+            ]
+            expected_modules = [module for module in expected_modules if module]
+            rule_object = rule.get("match_object")
+            resolved_module = source_module
+            # Fully-qualified Java calls have the classpath in the receiver,
+            # e.g. java.security.MessageDigest.getInstance("SHA-256").
+            if lang_key == "java" and object_name in expected_modules:
+                resolved_module = object_name
+            if rule_object != object_name and resolved_module not in expected_modules:
+                continue
+            if not expected_modules or resolved_module not in expected_modules:
                 continue
 
             expected_arg = rule.get("match_arg_contains")
-            if expected_arg and (not arg_text or expected_arg.lower() not in arg_text.lower()):
+            if expected_arg and (not arg_text or not _algorithm_token_matches(expected_arg, arg_text)):
                 continue
-
-            # Confidence: does the object name trace back to a real import?
-            confidence = "unverified"
-            expected = rule.get("expected_import") or rule.get("expected_module")
-            resolved = bindings.get(object_name)
-            if expected and resolved == expected:
-                confidence = "high"
 
             # Best-effort key-size extraction.
             key_size = _extract_key_size(args_node, source)
+            if key_size is None and lang_key == "java":
+                key_size = _extract_chained_key_size(call_node, source)
 
             findings.append(
                 Finding(
                     file=str(path),
                     line=call_node.start_point[0] + 1,  # tree-sitter is 0-indexed
                     matched_call=source[call_node.start_byte:call_node.end_byte].decode("utf-8", "ignore"),
-                    library=object_name,
+                    library=rule_object,
                     algorithm=rule["algorithm"],
                     primitive=rule["primitive"],
                     language=lang_key,
                     weak_by_default=rule["weak_by_default"],
-                    confidence=confidence,
+                    confidence="high",  # Every emitted multilang finding is explicit-import-backed.
                     key_size=key_size,
                     detection_method="tree_sitter_query",
                 )
@@ -554,12 +719,12 @@ def scan_directory(target: Path, rules_by_lang: Dict[str, List[dict]]) -> List[F
     all_findings: List[Finding] = []
 
     if target.is_file():
-        if not _should_skip(target):
+        if not _should_skip(target, target.parent):
             all_findings.extend(scan_file(target, rules_by_lang))
     elif target.is_dir():
         for ext in EXT_TO_LANG:
             for filepath in sorted(target.rglob(f"*{ext}")):
-                if not _should_skip(filepath):
+                if not _should_skip(filepath, target):
                     all_findings.extend(scan_file(filepath, rules_by_lang))
     else:
         logger.error("Target path does not exist: %s", target)
