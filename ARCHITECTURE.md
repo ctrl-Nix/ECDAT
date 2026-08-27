@@ -15,7 +15,7 @@ Legend:
 ECDAT/
 ├── .github/
 │   └── workflows/
-│       └── ecdat-scan.yml                     🚧 [Placeholder] CI/CD gate workflow
+│       └── ecdat-scan.yml                     ✅ [Built] CI/CD compliance gate workflow
 ├── api/
 │   ├── __init__.py                            ✅ [Built] Package init
 │   ├── database.py                            ✅ [Built] Database session & connection helpers
@@ -23,19 +23,19 @@ ECDAT/
 │   ├── models.py                              ✅ [Built] Pydantic schemas
 │   ├── core/
 │   │   ├── __init__.py                        ✅ [Built] Package init
-│   │   ├── config.py                          🚧 [Placeholder] Pydantic-settings environment configuration
-│   │   └── security.py                        🚧 [Placeholder] X-API-Key header auth & validation
+│   │   ├── config.py                          ✅ [Built] Pydantic-settings environment configuration
+│   │   └── security.py                        ✅ [Built] X-API-Key header auth & validation
 │   ├── routers/
 │   │   ├── __init__.py                        ✅ [Built] Package init
-│   │   ├── cbom.py                            🚧 [Placeholder] GET /scans/{id}/cbom
-│   │   ├── findings.py                        🚧 [Placeholder] GET /scans/{id}/findings (paginated)
+│   │   ├── cbom.py                            ✅ [Built] GET /scans/{id}/cbom
+│   │   ├── findings.py                        ✅ [Built] GET /scans/{id}/findings (paginated)
 │   │   ├── remediation.py                     ✅ [Built] GET /scans/{id}/remediation/{finding_id}
-│   │   └── scans.py                           🚧 [Placeholder] POST /scans, GET /scans/{id}, GET /health
+│   │   └── scans.py                           ✅ [Built] POST /scans, GET /scans/{id}, GET /health
 │   └── services/
 │       ├── __init__.py                        ✅ [Built] Package init
-│       ├── cbom_generator.py                  🚧 [Placeholder] CycloneDX 1.6 CBOM transform
-│       ├── risk_engine.py                     🚧 [Placeholder] Quantum-aware risk scoring & Mosca model
-│       └── scan_runner.py                     🚧 [Placeholder] Async scanner execution & ingestion
+│       ├── cbom_generator.py                  ✅ [Built] CycloneDX 1.6 CBOM transform
+│       ├── risk_engine.py                     ✅ [Built] Quantum-aware risk scoring & Mosca model
+│       └── scan_runner.py                     ✅ [Built] Async scanner execution & ingestion
 ├── dashboard/
 │   ├── README-frontend.md                     ✅ [Built] Frontend guide
 │   ├── index.html                             ✅ [Built] HTML entry point

@@ -105,11 +105,10 @@ Enterprise CI pipeline                Engineer workstation
 | Unified Finding schema + confidence scoring | ✅ Built & tested | "Every finding carries a confidence score — 'high' means we verified the import" |
 | PostgreSQL database + CRUD layer | ✅ Built & tested | "Findings are persisted with full audit history" |
 | FastAPI app factory + remediation router | ✅ Built | "Our API is built on FastAPI with Pydantic validation" |
-| Docker Compose packaging | ✅ Configured | "One command — `docker-compose up` — starts the entire stack" |
-| Scan router + findings router | 🚧 Placeholder | "The scan ingestion pipeline is architected and ready for implementation" |
-| Risk engine + CBOM generator | 🚧 Placeholder | "The risk scoring rules are designed and the CBOM schema is mapped" |
-| Dashboard (React + Recharts) | 🚧 Partial | "Our dashboard skeleton is verified and ready for API wiring" |
-| CI/CD gate workflow | 🚧 Not started | "The GitHub Actions workflow is designed with public-log redaction" |
+| Scan router + findings router | ✅ Built & tested | "The scan ingestion pipeline validates paths and persists findings asynchronously" |
+| Risk engine + CBOM generator | ✅ Built & tested | "The deterministic risk engine computes quantum risk tiers and generates CycloneDX 1.6 CBOM" |
+| Dashboard (React + Recharts + Vite) | ✅ Built (Demo Mode) | "Interactive visualization dashboard with trend charts, risk breakdowns, and CBOM viewer" |
+| CI/CD gate workflow | ✅ Built & tested | "GitHub Actions workflow enforces `--fail-on HIGH` policy and blocks non-compliant PR merges" |
 | Binary/container scanning | ❌ Out of scope | "The architecture extends to binaries and containers — source-code detection is our validated foundation" |
 
 **Critical honesty rule:** Never claim "zero false positives." Say: *"False positives are minimized through AST context-awareness."*
