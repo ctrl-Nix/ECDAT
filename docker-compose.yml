@@ -21,6 +21,13 @@ services:
     networks: [data_net]
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
+    # The official postgres entrypoint runs as root and must chown/chmod its
+    # data dir and socket dir, then drop to the postgres user, before it can
+    # start. cap_drop:[ALL] removes those abilities and the container crash-loops
+    # ("Operation not permitted"). Grant back only the minimal capabilities the
+    # entrypoint needs; the hardening (read_only rootfs, no-new-privileges, and
+    # the cap_drop:[ALL] baseline) is otherwise preserved.
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE, SETUID, SETGID]
     read_only: true
     tmpfs: [/tmp, /var/run/postgresql]
 
