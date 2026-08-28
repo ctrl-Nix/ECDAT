@@ -1,7 +1,12 @@
 import axios from 'axios';
 
+// Default to a same-origin '/api' path so the browser never makes a
+// cross-origin request: the dashboard's nginx proxies '/api/*' to the backend
+// over the internal Docker network (see dashboard/nginx.conf). This sidesteps
+// CORS and the strict CSP (connect-src 'self'), and keeps the API key off the
+// wire from the browser's perspective.
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },

@@ -17,6 +17,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import {
   mockFindings, mockScans, mockCbom, trendData, donutData,
 } from '../../mockData.js';
+import api from '../../lib/api';
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const STATUS_STYLE = {
@@ -255,6 +256,7 @@ function FindingPanel({ finding, onClose }) {
 /* ─── Sidebar ────────────────────────────────────────────────────────────── */
 const NAV = [
   { id: 'overview',    label: 'Overview',      icon: LayoutDashboard },
+  { id: 'live',        label: 'Live Scan',      icon: Terminal },
   { id: 'findings',    label: 'Findings',       icon: AlertTriangle },
   { id: 'scans',       label: 'Scan History',   icon: Activity },
   { id: 'cbom',        label: 'CBOM Library',   icon: FolderOpen },
@@ -786,6 +788,178 @@ function SettingsTab({ onLogout }) {
   );
 }
 
+/* ─── Live Scan Tab ──────────────────────────────────────────────────────── */
+// Maps a backend FindingOut (with nested risk_assessment) to the flat shape
+// the table + FindingPanel expect.
+function mapLiveFinding(f, scan) {
+  const ra = f.risk_assessment || {};
+  return {
+    id: f.id,
+    file: f.file,
+    line: f.line,
+    algorithm: f.algorithm,
+    language: f.language,
+    risk_tier: f.risk_tier,
+    confidence: f.confidence,
+    quantum_vulnerable: ra.quantum_vulnerable ?? false,
+    classical_broken: ra.classical_broken ?? false,
+    replacement: ra.recommended_replacement ?? null,
+    summary: f.risk_reason || '—',
+    date: scan?.started_at ? new Date(scan.started_at).toLocaleString() : '',
+  };
+}
+
+const TIER_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNSCORED: 4 };
+
+function LiveScanTab({ onSelectFinding }) {
+  const [status, setStatus] = useState('idle'); // idle | loading | success | empty | error
+  const [scan, setScan] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [findings, setFindings] = useState([]);
+  const [error, setError] = useState(null);
+
+  const fetchLive = useCallback(async () => {
+    setStatus('loading');
+    setError(null);
+    try {
+      // Newest scan first, then its full detail (findings + risk summary).
+      const list = await api.get('/scans', { params: { limit: 1 } });
+      const latest = list.data?.scans?.[0];
+      if (!latest) {
+        setStatus('empty');
+        return;
+      }
+      const detail = await api.get(`/scans/${latest.id}`);
+      const s = detail.data.scan;
+      const mapped = (detail.data.findings || [])
+        .map((f) => mapLiveFinding(f, s))
+        .sort((a, b) => (TIER_ORDER[a.risk_tier] ?? 9) - (TIER_ORDER[b.risk_tier] ?? 9));
+      setScan(s);
+      setSummary(detail.data.summary || null);
+      setFindings(mapped);
+      setStatus('success');
+    } catch (err) {
+      const msg = err?.response?.status
+        ? `API error ${err.response.status}: ${err.response.data?.detail || 'request failed'}`
+        : `Cannot reach the backend (${err.message}). Is the stack running (docker compose up)?`;
+      setError(msg);
+      setStatus('error');
+    }
+  }, []);
+
+  const TIERS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+
+  return (
+    <div className="space-y-5">
+      {/* Header + fetch button */}
+      <div className="card p-5 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>Live scan from the database</div>
+          <div className="text-xs mt-1 num" style={{ color: 'var(--t2)' }}>
+            Fetches the most recent scan persisted in the PostgreSQL container — findings + risk assessments, no mock data.
+          </div>
+        </div>
+        <button
+          onClick={fetchLive}
+          disabled={status === 'loading'}
+          className="btn-primary flex items-center gap-2"
+        >
+          {status === 'loading'
+            ? <><LoaderCircle className="h-4 w-4 animate-spin" /> Fetching…</>
+            : <><RefreshCw className="h-4 w-4" /> Fetch live scan</>}
+        </button>
+      </div>
+
+      {status === 'idle' && (
+        <div className="card p-8 text-center text-sm" style={{ color: 'var(--t3)' }}>
+          Click <span style={{ color: 'var(--cyan)' }}>Fetch live scan</span> to load the latest results from the container database.
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="card p-5 flex items-start gap-3" style={{ borderColor: 'rgba(255,61,61,0.25)' }}>
+          <AlertTriangle className="h-5 w-5 shrink-0" style={{ color: 'var(--critical)' }} />
+          <div className="text-sm" style={{ color: 'var(--critical)' }}>{error}</div>
+        </div>
+      )}
+
+      {status === 'empty' && (
+        <div className="card p-8 text-center text-sm" style={{ color: 'var(--t3)' }}>
+          No scans found in the database yet. Run a scan first, then fetch again.
+        </div>
+      )}
+
+      {status === 'success' && (
+        <>
+          {/* Scan meta + summary chips */}
+          <div className="card p-5 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--t2)' }}>
+              <span className={`badge ${STATUS_STYLE[scan?.status] || 'badge-low'} flex gap-1.5 items-center`}>
+                {STATUS_ICON[scan?.status]} {scan?.status}
+              </span>
+              <span className="num">Scan #{scan?.id}</span>
+              {scan?.started_at && <span className="num">{new Date(scan.started_at).toLocaleString()}</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {TIERS.map((t) => (
+                <span key={t} className={`badge badge-${t.toLowerCase()}`}>
+                  {t} {summary?.[t] ?? 0}
+                </span>
+              ))}
+              <span className="text-xs num" style={{ color: 'var(--t3)' }}>· {summary?.total ?? findings.length} total</span>
+            </div>
+          </div>
+
+          {/* Findings table */}
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Risk Tier</th>
+                    <th>Algorithm</th>
+                    <th>File</th>
+                    <th>Line</th>
+                    <th>Lang</th>
+                    <th>Classical</th>
+                    <th>Quantum</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {findings.length === 0 && (
+                    <tr><td colSpan={8} className="text-center py-8 text-sm" style={{ color: 'var(--t3)' }}>Scan completed with no findings.</td></tr>
+                  )}
+                  {findings.map((f) => (
+                    <tr key={f.id} onClick={() => onSelectFinding(f)} className="cursor-pointer">
+                      <td><RiskBadge tier={f.risk_tier} /></td>
+                      <td className="mono font-semibold" style={{ color: 'var(--t1)' }}>{f.algorithm}</td>
+                      <td className="mono" style={{ color: 'var(--t1)' }}>{f.file}</td>
+                      <td className="num" style={{ color: 'var(--t2)' }}>{f.line}</td>
+                      <td className="text-xs" style={{ color: 'var(--t2)' }}>{f.language}</td>
+                      <td>
+                        {f.classical_broken
+                          ? <span className="text-xs" style={{ color: 'var(--critical)' }}>Broken</span>
+                          : <span className="text-xs" style={{ color: 'var(--t3)' }}>—</span>}
+                      </td>
+                      <td>
+                        {f.quantum_vulnerable
+                          ? <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--purple)' }}><Zap className="h-3 w-3" />Yes</span>
+                          : <span className="text-xs" style={{ color: 'var(--t3)' }}>—</span>}
+                      </td>
+                      <td className="text-right"><ChevronRight className="h-4 w-4 inline" style={{ color: 'var(--t3)' }} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main DashboardPage ─────────────────────────────────────────────────── */
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -814,6 +988,7 @@ export default function DashboardPage() {
 
   const TAB_CONTENT = {
     overview: <OverviewTab {...tabProps} />,
+    live:     <LiveScanTab onSelectFinding={setSelectedFinding} />,
     findings: <FindingsTab {...tabProps} />,
     scans:    <ScansTab {...tabProps} />,
     cbom:     <CbomTab />,
