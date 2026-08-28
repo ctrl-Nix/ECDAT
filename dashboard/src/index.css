@@ -15,37 +15,37 @@
   color-scheme: light;
 
   /* Backgrounds — Light Pink & White */
-  --void:         #FFF6F7;  /* Third band */
+  --void:         #FFF6F7;  /* Main light void background */
   --surface:      #FFFFFF;  /* Pure white for cards */
-  --surface-r:    #F8D8DD;  /* Second band */
+  --surface-r:    #F8D8DD;  /* Raised surface */
   --surface-h:    #FBE8EA;  /* Hover state */
-  --border:       #F8D8DD;  /* Second band */
-  --border-s:     #FF788D;  /* Top band */
+  --border:       #F8D8DD;  /* Border scale */
+  --border-s:     #FF788D;  /* Selected border */
 
   /* Brand — Watermelon Pink */
-  --cyan:         #FF788D;  /* Top band */
+  --cyan:         #FF788D;
   --cyan-10:      rgba(255, 120, 141, 0.12);
   --cyan-20:      rgba(255, 120, 141, 0.25);
 
-  /* Quantum risk — Dark Green */
-  --purple:       #236531;  /* Bottom band */
-  --purple-10:    rgba(35, 101, 49, 0.12);
+  /* Quantum risk — Deep Forest Green */
+  --purple:       #1E532B;
+  --purple-10:    rgba(30, 83, 43, 0.12);
 
   /* Safe / Secondary */
-  --green:        #236531;  /* Bottom band */
-  --green-10:     rgba(35, 101, 49, 0.12);
+  --green:        #1E532B;
+  --green-10:     rgba(30, 83, 43, 0.12);
 
   /* Risk tiers — Professional semantic tones */
   --critical:     #E53935;  
-  --high:         #FB8C00;  
-  --medium:       #FFB300;  
-  --low:          #236531;  /* Bottom band */
+  --high:         #E65100;  
+  --medium:       #D97706;  
+  --low:          #1E532B;  
 
-  /* Text — Dark Green scale for readability on light pink */
-  --t1: #0A1C0E;  /* Extremely dark green */
-  --t2: #236531;  /* Bottom band */
-  --t3: #4B8C5B;  /* Muted mid-green */
-  --t4: #F8D8DD;  /* Second band */
+  /* Text — Ultra-Dark High-Contrast scale for light background */
+  --t1: #0F172A;  /* Deep Slate-900 for primary headings & headers */
+  --t2: #334155;  /* Slate-700 for main body text */
+  --t3: #475569;  /* Slate-600 for subtext & labels */
+  --t4: #64748B;  /* Slate-500 for captions */
 }
 
 /* ── Base reset ─────────────────────────────────────────────────────────── */
