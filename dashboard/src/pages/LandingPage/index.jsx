@@ -668,7 +668,7 @@ export default function LandingPage() {
               links: [
                 { label: 'Port 53', href: 'https://sih.gov.in/', external: true },
                 { label: 'SIH 2026', href: 'https://sih.gov.in/', external: true },
-                { label: 'PS 26164', href: 'https://sih.gov.in/', external: true },
+                { label: 'PS 26164', href: 'https://sih.gov.in/sih2026PS', external: true },
               ],
             },
           ].map(({ title, links }) => (
@@ -695,7 +695,7 @@ export default function LandingPage() {
           ))}
         </div>
         <div className="border-t py-4 text-center text-xs" style={{ borderColor: 'var(--border)', color: 'var(--t4)' }}>
-          © 2026 Team Port 53 · <a href="https://sih.gov.in/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>Smart India Hackathon</a> · PS 26164
+          © 2026 Team Port 53 · <a href="https://sih.gov.in/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>Smart India Hackathon</a> · <a href="https://sih.gov.in/sih2026PS" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>PS 26164</a>
         </div>
       </footer>
     </div>
