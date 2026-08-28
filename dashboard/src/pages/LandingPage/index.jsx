@@ -646,20 +646,56 @@ export default function LandingPage() {
             </p>
           </div>
           {[
-            { title: 'Platform',   links: ['Scanner', 'Dashboard', 'Compliance', 'CBOM'] },
-            { title: 'Resources',  links: ['Docs', 'API Reference', 'Support'] },
-            { title: 'Team',       links: ['Port 53', 'SIH 2026', 'PS 26164'] },
+            {
+              title: 'Platform',
+              links: [
+                { label: 'Scanner', href: '#scanner' },
+                { label: 'Dashboard', href: '/dashboard' },
+                { label: 'Compliance', href: '#compliance' },
+                { label: 'CBOM', href: '#features' },
+              ],
+            },
+            {
+              title: 'Resources',
+              links: [
+                { label: 'Docs', href: '#docs' },
+                { label: 'API Reference', href: 'http://127.0.0.1:8000/docs', external: true },
+                { label: 'Support', href: '#docs' },
+              ],
+            },
+            {
+              title: 'Team',
+              links: [
+                { label: 'Port 53', href: 'https://sih.gov.in/', external: true },
+                { label: 'SIH 2026', href: 'https://sih.gov.in/', external: true },
+                { label: 'PS 26164', href: 'https://sih.gov.in/', external: true },
+              ],
+            },
           ].map(({ title, links }) => (
             <div key={title}>
               <div className="mb-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--t1)' }}>{title}</div>
               <ul className="space-y-2">
-                {links.map((l) => <li key={l} className="text-xs cursor-pointer transition-colors" style={{ color: 'var(--t3)' }} onMouseOver={e=>e.currentTarget.style.color='var(--t1)'} onMouseOut={e=>e.currentTarget.style.color='var(--t3)'}>{l}</li>)}
+                {links.map((l) => (
+                  <li key={l.label}>
+                    <a
+                      href={l.href}
+                      target={l.external ? "_blank" : undefined}
+                      rel={l.external ? "noopener noreferrer" : undefined}
+                      className="text-xs transition-colors block"
+                      style={{ color: 'var(--t3)', textDecoration: 'none' }}
+                      onMouseOver={(e) => (e.currentTarget.style.color = 'var(--t1)')}
+                      onMouseOut={(e) => (e.currentTarget.style.color = 'var(--t3)')}
+                    >
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
               </ul>
             </div>
           ))}
         </div>
         <div className="border-t py-4 text-center text-xs" style={{ borderColor: 'var(--border)', color: 'var(--t4)' }}>
-          © 2026 Team Port 53 · Smart India Hackathon · PS 26164
+          © 2026 Team Port 53 · <a href="https://sih.gov.in/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>Smart India Hackathon</a> · PS 26164
         </div>
       </footer>
     </div>

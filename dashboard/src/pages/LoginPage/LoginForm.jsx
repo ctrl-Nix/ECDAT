@@ -106,7 +106,7 @@ export default function LoginForm() {
 
           {/* Footer */}
           <div className="relative text-xs num" style={{ color: 'var(--t4)' }}>
-            © 2026 Team Port 53 · Smart India Hackathon · PS 26164
+            © 2026 Team Port 53 · <a href="https://sih.gov.in/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'inherit' }}>Smart India Hackathon</a> · PS 26164
           </div>
         </div>
 
