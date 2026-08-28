@@ -652,15 +652,15 @@ export default function LandingPage() {
                 { label: 'Scanner', href: '#scanner' },
                 { label: 'Dashboard', href: '/dashboard' },
                 { label: 'Compliance', href: '#compliance' },
-                { label: 'CBOM', href: '#features' },
+                { label: 'CBOM', href: '#ledger' },
               ],
             },
             {
               title: 'Resources',
               links: [
-                { label: 'Docs', href: '#docs' },
+                { label: 'Docs', href: 'https://github.com/ctrl-Nix/ECDAT#readme', external: true },
                 { label: 'API Reference', href: 'http://127.0.0.1:8000/docs', external: true },
-                { label: 'Support', href: '#docs' },
+                { label: 'Support', href: 'https://github.com/ctrl-Nix/ECDAT/issues', external: true },
               ],
             },
             {
@@ -677,17 +677,29 @@ export default function LandingPage() {
               <ul className="space-y-2">
                 {links.map((l) => (
                   <li key={l.label}>
-                    <a
-                      href={l.href}
-                      target={l.external ? "_blank" : undefined}
-                      rel={l.external ? "noopener noreferrer" : undefined}
-                      className="text-xs transition-colors block"
-                      style={{ color: 'var(--t3)', textDecoration: 'none' }}
-                      onMouseOver={(e) => (e.currentTarget.style.color = 'var(--t1)')}
-                      onMouseOut={(e) => (e.currentTarget.style.color = 'var(--t3)')}
-                    >
-                      {l.label}
-                    </a>
+                    {l.href?.startsWith('/') ? (
+                      <Link
+                        to={l.href}
+                        className="text-xs transition-colors block"
+                        style={{ color: 'var(--t3)', textDecoration: 'none' }}
+                        onMouseOver={(e) => (e.currentTarget.style.color = 'var(--t1)')}
+                        onMouseOut={(e) => (e.currentTarget.style.color = 'var(--t3)')}
+                      >
+                        {l.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href={l.href}
+                        target={l.external ? "_blank" : undefined}
+                        rel={l.external ? "noopener noreferrer" : undefined}
+                        className="text-xs transition-colors block"
+                        style={{ color: 'var(--t3)', textDecoration: 'none' }}
+                        onMouseOver={(e) => (e.currentTarget.style.color = 'var(--t1)')}
+                        onMouseOut={(e) => (e.currentTarget.style.color = 'var(--t3)')}
+                      >
+                        {l.label}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
