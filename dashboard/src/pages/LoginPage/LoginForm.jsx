@@ -106,7 +106,7 @@ export default function LoginForm() {
 
           {/* Footer */}
           <div className="relative text-xs num" style={{ color: 'var(--t4)' }}>
-            © 2026 Team Port 53 · <a href="https://sih.gov.in/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'inherit' }}>Smart India Hackathon</a> · <a href="https://sih.gov.in/sih2026PS" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'inherit' }}>PS 26164</a>
+            © 2026 <a href="https://github.com/ctrl-Nix/ECDAT" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'inherit' }}>Team Port 53</a> · <a href="https://sih.gov.in/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'inherit' }}>Smart India Hackathon</a> · <a href="https://sih.gov.in/sih2026PS" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'inherit' }}>PS 26164</a>
           </div>
         </div>
 

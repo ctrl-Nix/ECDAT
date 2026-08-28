@@ -666,7 +666,7 @@ export default function LandingPage() {
             {
               title: 'Team',
               links: [
-                { label: 'Port 53', href: 'https://sih.gov.in/', external: true },
+                { label: 'Port 53', href: 'https://github.com/ctrl-Nix/ECDAT', external: true },
                 { label: 'SIH 2026', href: 'https://sih.gov.in/', external: true },
                 { label: 'PS 26164', href: 'https://sih.gov.in/sih2026PS', external: true },
               ],
@@ -695,7 +695,7 @@ export default function LandingPage() {
           ))}
         </div>
         <div className="border-t py-4 text-center text-xs" style={{ borderColor: 'var(--border)', color: 'var(--t4)' }}>
-          © 2026 Team Port 53 · <a href="https://sih.gov.in/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>Smart India Hackathon</a> · <a href="https://sih.gov.in/sih2026PS" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>PS 26164</a>
+          © 2026 <a href="https://github.com/ctrl-Nix/ECDAT" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>Team Port 53</a> · <a href="https://sih.gov.in/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>Smart India Hackathon</a> · <a href="https://sih.gov.in/sih2026PS" target="_blank" rel="noopener noreferrer" className="transition-colors hover:underline" style={{ color: 'var(--t3)' }}>PS 26164</a>
         </div>
       </footer>
     </div>
