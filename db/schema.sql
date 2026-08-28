@@ -6,7 +6,7 @@
 -- This schema is the one documented in ARCHITECTURE.md and is the single source
 -- of truth for the DB. It is applied automatically when the Postgres container
 -- first starts (mounted into /docker-entrypoint-initdb.d by docker-compose.yml).
--- The SQLAlchemy models in backend/db/models.py mirror it exactly.
+-- The SQLAlchemy models in db/models.py mirror it exactly.
 --
 -- Classification model (per PS 26164 wording): findings are classified by type,
 -- lifetime and business criticality, and risk-scored via Mosca's algorithm.
