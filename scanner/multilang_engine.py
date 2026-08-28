@@ -50,7 +50,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import yaml
-from tree_sitter_languages import get_language, get_parser
+try:
+    from tree_sitter_languages import get_language, get_parser
+    TREE_SITTER_AVAILABLE = True
+except ImportError:
+    TREE_SITTER_AVAILABLE = False
+    get_language = None
+    get_parser = None
 
 # Use the canonical Finding model shared by all engines.
 # This guarantees that Python-engine and multilang-engine output are
@@ -570,7 +576,7 @@ def scan_file(path: Path, rules_by_lang: Dict[str, List[dict]]) -> List[Finding]
         Findings sorted by line number.
     """
     lang_key = EXT_TO_LANG.get(path.suffix)
-    if lang_key is None:
+    if not TREE_SITTER_AVAILABLE or lang_key is None:
         return []
 
     # TypeScript deliberately reuses the JavaScript detection rules.  The
