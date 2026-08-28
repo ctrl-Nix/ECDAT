@@ -1,3 +1,4 @@
+import ProjectDemoWalkthrough from './components/ProjectDemoWalkthrough';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';

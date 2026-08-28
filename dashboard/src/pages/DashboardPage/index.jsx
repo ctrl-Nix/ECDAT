@@ -1,3 +1,4 @@
+import ProjectDemoWalkthrough from '../../components/ProjectDemoWalkthrough';
 import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -808,6 +809,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <ProjectDemoWalkthrough/>
             <button className="relative rounded-full border p-2 transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--t2)' }} onMouseOver={e=>e.currentTarget.style.color='var(--t1)'} onMouseOut={e=>e.currentTarget.style.color='var(--t2)'}>
               <Bell className="h-4 w-4" />
               <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full" style={{ background: 'var(--critical)' }} />
