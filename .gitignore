@@ -26,4 +26,8 @@ build/
 *.sqlite
 *.sqlite3
 
+# Local Compose overrides (may contain demo keys / local ports — never commit)
+docker-compose.override.yml
+docker-compose.override.yaml
+
 
