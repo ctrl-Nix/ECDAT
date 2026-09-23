@@ -180,3 +180,53 @@ def test_lief_engine_if_available():
     elf_path = FIXTURES_DIR / "libcrypto_positive.elf"
     findings = scan_file(elf_path)
     assert len(findings) > 0
+
+
+def test_cli_binary_scan_disabled_by_default(monkeypatch, capsys):
+    """If SCAN_ENABLE_BINARY is false/unset, CLI exits 1 with an explicit error message."""
+    from scanner.cli import main
+    monkeypatch.delenv("SCAN_ENABLE_BINARY", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        main([str(FIXTURES_DIR), "--scan-type", "binary"])
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "SCAN_ENABLE_BINARY is not enabled" in err
+
+
+def test_cli_binary_scan_enabled(monkeypatch, capsys):
+    """With SCAN_ENABLE_BINARY=true, CLI emits JSON array with artifact_type=BINARY."""
+    import json
+    from scanner.cli import main
+    monkeypatch.setenv("SCAN_ENABLE_BINARY", "true")
+    exit_code = main([str(FIXTURES_DIR), "--scan-type", "binary"])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert len(data) > 0
+    for finding in data:
+        assert finding["artifact_type"] == "BINARY"
+        assert finding["artifact_ref"] != ""
+        assert finding["detection_method"] in ("binary_symbol_table", "binary_constant_scan")
+
+
+def test_cli_binary_scan_min_confidence(monkeypatch, capsys):
+    """--min-confidence PROBABLE filters out UNVERIFIED tier-2 constant findings."""
+    import json
+    from scanner.cli import main
+    monkeypatch.setenv("SCAN_ENABLE_BINARY", "true")
+    exit_code = main([str(FIXTURES_DIR), "--scan-type", "binary", "--min-confidence", "PROBABLE"])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert len(data) > 0
+    for finding in data:
+        assert finding["confidence_band"] in ("VERIFIED", "PROBABLE")
+        assert finding["detection_method"] == "binary_symbol_table"
+
+
+def test_cli_binary_scan_fail_on(monkeypatch):
+    """--fail-on CRITICAL returns 2 if critical findings exist."""
+    from scanner.cli import main
+    monkeypatch.setenv("SCAN_ENABLE_BINARY", "true")
+    exit_code = main([str(FIXTURES_DIR), "--scan-type", "binary", "--fail-on", "CRITICAL"])
+    assert exit_code == 2

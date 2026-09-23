@@ -40,6 +40,16 @@ def _scan_config(target: Path) -> list:
         return config_engine.scan_directory(target)
     return config_engine.scan_file(target)
 
+def _scan_binary(target: Path) -> list:
+    import os
+    if os.environ.get("SCAN_ENABLE_BINARY", "false").lower() not in ("true", "1", "yes"):
+        print("error: binary scanning requested but SCAN_ENABLE_BINARY is not enabled", file=sys.stderr)
+        sys.exit(1)
+    from scanner import binary_engine
+    if target.is_dir():
+        return binary_engine.scan_directory(target)
+    return binary_engine.scan_file(target)
+
 def scan(target: Path, scan_types: list[str]) -> list:
     """Scan a local file or tree using all registered engines specified in scan_types."""
     findings = []
@@ -63,6 +73,9 @@ def scan(target: Path, scan_types: list[str]) -> list:
 
     if "config" in scan_types:
         findings.extend(_scan_config(target))
+
+    if "binary" in scan_types:
+        findings.extend(_scan_binary(target))
         
     return findings
 
@@ -92,6 +105,9 @@ def _prepare_findings(
     root = target if target.is_dir() else target.parent
     raw = [asdict(finding) for finding in scan(target, scan_types)]
     for finding in raw:
+        if finding.get("detection_method") in ("binary_symbol_table", "binary_constant_scan"):
+            finding["artifact_type"] = "BINARY"
+            finding["artifact_ref"] = finding.get("matched_call", "")
         artifact_type = finding.get("artifact_type", "")
         if redact_paths and artifact_type in ("DEPENDENCY_MANIFEST", "CONFIG_FILE") and finding.get("artifact_ref"):
             finding["artifact_ref"] = _relative_or_redacted(finding["artifact_ref"], root, redact_paths)
