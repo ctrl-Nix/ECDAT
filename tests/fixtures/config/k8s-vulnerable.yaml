@@ -1,0 +1,36 @@
+# k8s-vulnerable.yaml — Kubernetes Ingress with weak TLS settings
+# This file is a TEST FIXTURE for the ECDAT config engine.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vulnerable-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - example.com
+      secretName: tls-secret
+  rules:
+    - host: example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: example-svc
+                port:
+                  number: 443
+---
+# TLS configuration for the cluster
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tls-config
+data:
+  tls_version: "TLSv1.0"
+  minimum_version: "1.1"
+  cipher_suites: "RC4-SHA:DES-CBC3-SHA"
+  ssl_verify: "false"
+  rsa_bits: "1024"

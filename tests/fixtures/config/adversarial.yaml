@@ -1,0 +1,25 @@
+# adversarial.yaml — ECDAT config engine adversarial test fixture.
+# All "weak" strings appear only in comments, key names, or string literals
+# that are NOT cryptographic settings. No findings should be emitted.
+
+# This comment mentions TLSv1.0 but should be ignored
+# tls_version: TLSv1.0 — old config, do not use
+
+metadata:
+  name: adversarial-test
+  # ssl_ciphers: RC4 — do not use
+
+spec:
+  # A key whose NAME contains a crypto term but whose VALUE is safe
+  old_tls_default_version_disabled: "TLSv1.3"
+  tls_disabled_flag: "true"
+
+  # Value is a free-form description string, not a setting
+  description: "This service previously used TLSv1.0 but was upgraded"
+
+  config:
+    # Strong TLS settings
+    tls_version: "TLSv1.3"
+    ssl_verify: "true"
+    cipher_suites: "TLS_AES_256_GCM_SHA384"
+    rsa_bits: "4096"

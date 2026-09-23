@@ -24,4 +24,14 @@ except Exception:
     def scan_dependency(*args, **kwargs):
         raise RuntimeError("dependency scanner unavailable; engine failed to import")
 
-__all__ = ["scan_cli", "Finding", "scan_python", "scan_multilang", "scan_dependency"]
+try:
+    from scanner.config_engine import scan_directory as _scan_cfg_dir, scan_file as _scan_cfg_file
+    def scan_config(target, rules=None):
+        if getattr(target, "is_dir", lambda: False)():
+            return _scan_cfg_dir(target, rules)
+        return _scan_cfg_file(target, rules)
+except Exception:
+    def scan_config(*args, **kwargs):
+        raise RuntimeError("config scanner unavailable; engine failed to import")
+
+__all__ = ["scan_cli", "Finding", "scan_python", "scan_multilang", "scan_dependency", "scan_config"]

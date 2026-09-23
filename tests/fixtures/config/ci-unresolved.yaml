@@ -1,0 +1,16 @@
+# ci-unresolved.yaml — GitHub Actions workflow with unresolved TLS variable
+# TEST FIXTURE for the ECDAT config engine.
+name: CI
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure TLS
+        env:
+          tls_version: ${{ secrets.TLS_VERSION }}
+          ssl_verify: ${{ vars.SSL_VERIFY }}
+        run: echo "configured"

@@ -34,6 +34,12 @@ def _scan_dependency(target: Path) -> list:
         return dependency_engine.scan_directory(target)
     return dependency_engine.scan_file(target)
 
+def _scan_config(target: Path) -> list:
+    from scanner import config_engine
+    if target.is_dir():
+        return config_engine.scan_directory(target)
+    return config_engine.scan_file(target)
+
 def scan(target: Path, scan_types: list[str]) -> list:
     """Scan a local file or tree using all registered engines specified in scan_types."""
     findings = []
@@ -54,6 +60,9 @@ def scan(target: Path, scan_types: list[str]) -> list:
             
     if "dependency" in scan_types:
         findings.extend(_scan_dependency(target))
+
+    if "config" in scan_types:
+        findings.extend(_scan_config(target))
         
     return findings
 
@@ -83,7 +92,8 @@ def _prepare_findings(
     root = target if target.is_dir() else target.parent
     raw = [asdict(finding) for finding in scan(target, scan_types)]
     for finding in raw:
-        if redact_paths and finding.get("artifact_type") == "DEPENDENCY_MANIFEST" and finding.get("artifact_ref"):
+        artifact_type = finding.get("artifact_type", "")
+        if redact_paths and artifact_type in ("DEPENDENCY_MANIFEST", "CONFIG_FILE") and finding.get("artifact_ref"):
             finding["artifact_ref"] = _relative_or_redacted(finding["artifact_ref"], root, redact_paths)
         finding["file"] = _relative_or_redacted(finding["file"], root, redact_paths)
         finding["source_context"] = source_context or _source_context(finding["file"])

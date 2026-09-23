@@ -1,0 +1,292 @@
+# scanner/rules/config.yaml
+#
+# Declarative rules for Config/IaC cryptographic discovery (IAC feature).
+# Supported kinds: yaml, hcl2, nginx, json
+#
+# Rule schema
+# -----------
+# <rule_id>:
+#   name:           Human-readable name
+#   algorithm:      Canonical crypto algorithm string (matches Finding.algorithm)
+#   primitive:      One of: encryption | hashing | key_exchange | digital_signature | protocol_version
+#   key_size:       Integer bits (RSA/ECDSA/AES only); null otherwise
+#   description:    Why this is a weakness
+#   weak_by_default: true = always a finding; false = only if context confirms weak usage
+#   confidence_gain: high | probable | unverified
+#     high       => explicit literal value, no interpolation
+#     probable   => weak default (no explicit version, omitted setting)
+#     unverified => interpolation boundary (${VAR}, {{ var }}, etc.)
+#   detectors:      List of detector specs (see below)
+#
+# Detector spec
+# -------------
+# kind: yaml | hcl2 | nginx | json
+#
+# YAML detectors:
+#   key_patterns:   [list of key names to look for, case-insensitive]
+#   value_patterns: [list of exact strings to match in the value]
+#   key_contains:   match if the key contains any of these substrings
+#
+# HCL2 detectors:
+#   attribute:       exact attribute name
+#   attribute_patterns: list of attribute substrings
+#   value_patterns:  list of exact strings to match
+#   resource_types:  optional list of resource type prefixes
+#
+# Nginx detectors:
+#   directive:       nginx directive name (exact)
+#   value_contains:  list of substrings to match in directive value
+#
+# All matches are against parsed structure values (not raw text / comments).
+
+rules:
+
+  # ─── TLS Protocol Versions ───────────────────────────────────────────────
+
+  tls_v1_0:
+    name: "TLS 1.0 (Deprecated)"
+    algorithm: "TLSv1.0"
+    primitive: "protocol_version"
+    key_size: null
+    description: "TLS 1.0 is deprecated (RFC 8996) and broken by POODLE, BEAST, and CRIME attacks."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["tls_version", "tlsversion", "ssl_protocol", "ssl_protocols", "min_protocol",
+                       "minimum_version", "minimum_tls_version", "tls_min_version",
+                       "protocol_version", "sslProtocol", "tlsMinVersion"]
+        value_patterns: ["TLSv1.0", "TLSv1", "1.0", "SSLv3", "SSLv2"]
+      - kind: yaml
+        key_patterns: ["ssl_policy"]
+        value_patterns: ["ELBSecurityPolicy-TLS-1-0", "ELBSecurityPolicy-2015-05"]
+      - kind: hcl2
+        attribute: "ssl_policy"
+        value_patterns: ["ELBSecurityPolicy-TLS-1-0", "ELBSecurityPolicy-2015-05"]
+      - kind: hcl2
+        attribute: "min_tls_version"
+        value_patterns: ["1.0", "TLSv1"]
+      - kind: hcl2
+        attribute: "tls_version"
+        value_patterns: ["TLSv1.0", "TLSv1", "1.0"]
+      - kind: nginx
+        directive: "ssl_protocols"
+        value_contains: ["TLSv1 ", "TLSv1;", "TLSv1\t", " TLSv1.0", "TLSv1.0 ", "TLSv1.0;"]
+
+  tls_v1_1:
+    name: "TLS 1.1 (Deprecated)"
+    algorithm: "TLSv1.1"
+    primitive: "protocol_version"
+    key_size: null
+    description: "TLS 1.1 is deprecated (RFC 8996). Use TLS 1.3."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["tls_version", "tlsversion", "ssl_protocol", "ssl_protocols", "min_protocol",
+                       "minimum_version", "minimum_tls_version", "tls_min_version", "protocol_version"]
+        value_patterns: ["TLSv1.1", "1.1"]
+      - kind: hcl2
+        attribute: "ssl_policy"
+        value_patterns: ["ELBSecurityPolicy-TLS-1-1"]
+      - kind: hcl2
+        attribute: "tls_version"
+        value_patterns: ["TLSv1.1", "1.1"]
+      - kind: nginx
+        directive: "ssl_protocols"
+        value_contains: ["TLSv1.1 ", "TLSv1.1;", "TLSv1.1\t"]
+
+  tls_v1_2:
+    name: "TLS 1.2 (Quantum-Vulnerable)"
+    algorithm: "TLSv1.2"
+    primitive: "protocol_version"
+    key_size: null
+    description: "TLS 1.2 uses classically secure but quantum-vulnerable key exchange. Plan migration to TLS 1.3 + PQC."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["tls_version", "tlsversion", "ssl_protocol", "min_protocol",
+                       "minimum_version", "minimum_tls_version", "tls_min_version", "protocol_version",
+                       "max_version", "maximum_version"]
+        value_patterns: ["TLSv1.2", "1.2"]
+      - kind: hcl2
+        attribute: "tls_version"
+        value_patterns: ["TLSv1.2", "1.2"]
+      - kind: hcl2
+        attribute: "min_tls_version"
+        value_patterns: ["TLSv1.2", "1.2"]
+      - kind: nginx
+        directive: "ssl_protocols"
+        value_contains: ["TLSv1.2"]
+
+  tls_v1_3:
+    name: "TLS 1.3 (Current)"
+    algorithm: "TLSv1.3"
+    primitive: "protocol_version"
+    key_size: null
+    description: "TLS 1.3 is the current standard. No action needed unless downgrade is possible."
+    weak_by_default: false
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["tls_version", "tlsversion", "ssl_protocol", "min_protocol",
+                       "minimum_version", "minimum_tls_version", "tls_min_version", "protocol_version",
+                       "max_version", "maximum_version", "maximum_tls_version", "tls_max_version"]
+        value_patterns: ["TLSv1.3", "1.3"]
+      - kind: hcl2
+        attribute: "tls_version"
+        value_patterns: ["TLSv1.3", "1.3"]
+      - kind: nginx
+        directive: "ssl_protocols"
+        value_contains: ["TLSv1.3"]
+
+  # ─── Cipher Suites ────────────────────────────────────────────────────────
+
+  weak_cipher_rc4:
+    name: "RC4 Cipher Suite (Broken)"
+    algorithm: "RC4"
+    primitive: "encryption"
+    key_size: null
+    description: "RC4 is cryptographically broken (RFC 7465). All RC4 ciphersuites must be removed."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["cipher_suites", "ciphersuites", "ssl_ciphers", "allowed_ciphers", "tls_cipher"]
+        value_patterns: ["RC4", "RC4-SHA", "RC4-MD5", "EXP-RC4"]
+      - kind: nginx
+        directive: "ssl_ciphers"
+        value_contains: ["RC4"]
+      - kind: hcl2
+        attribute: "cipher_suite"
+        value_patterns: ["RC4"]
+
+  weak_cipher_des:
+    name: "DES / 3DES Cipher Suite (Broken)"
+    algorithm: "DES"
+    primitive: "encryption"
+    key_size: null
+    description: "DES is 56-bit and broken. 3DES is vulnerable to Sweet32. Remove from cipher list."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["cipher_suites", "ciphersuites", "ssl_ciphers", "allowed_ciphers"]
+        value_patterns: ["DES", "3DES", "DES-CBC3", "DES3", "EDH-RSA-DES-CBC3", "ECDH-RSA-DES-CBC3", "DES-CBC3-SHA"]
+      - kind: nginx
+        directive: "ssl_ciphers"
+        value_contains: ["DES", "3DES"]
+
+  weak_cipher_md5:
+    name: "MD5 in Cipher Suite (Broken)"
+    algorithm: "MD5"
+    primitive: "hashing"
+    key_size: null
+    description: "MD5-based cipher suites are cryptographically broken and must not be used."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["cipher_suites", "ciphersuites", "ssl_ciphers"]
+        value_patterns: ["MD5", "RC4-MD5", "EXP-RC4-MD5"]
+      - kind: nginx
+        directive: "ssl_ciphers"
+        value_contains: ["MD5"]
+
+  weak_cipher_export:
+    name: "Export-Grade Cipher (Broken)"
+    algorithm: "EXPORT"
+    primitive: "encryption"
+    key_size: null
+    description: "Export-grade ciphers (40/56-bit) are trivially broken (FREAK/Logjam attacks)."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: nginx
+        directive: "ssl_ciphers"
+        value_contains: ["EXP", "EXPORT"]
+      - kind: yaml
+        key_patterns: ["cipher_suites", "ssl_ciphers"]
+        value_patterns: ["EXP", "EXPORT"]
+
+  # ─── RSA / ECDSA Key Sizes ────────────────────────────────────────────────
+
+  rsa_1024:
+    name: "RSA-1024 (Too Small)"
+    algorithm: "RSA"
+    primitive: "key_exchange"
+    key_size: 1024
+    description: "RSA-1024 is deprecated (NIST SP 800-56B Rev. 3). Use RSA-2048 or higher."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["rsa_bits", "rsa_key_size", "key_size", "key_bits", "rsa_size"]
+        value_patterns: ["1024"]
+      - kind: hcl2
+        attribute: "rsa_bits"
+        value_patterns: ["1024"]
+      - kind: hcl2
+        attribute: "key_size"
+        value_patterns: ["1024"]
+
+  rsa_2048:
+    name: "RSA-2048 (Quantum-Vulnerable)"
+    algorithm: "RSA"
+    primitive: "key_exchange"
+    key_size: 2048
+    description: "RSA-2048 is classically safe but quantum-vulnerable. Plan migration to RSA-4096 or PQC."
+    weak_by_default: false
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["rsa_bits", "rsa_key_size", "key_size", "key_bits"]
+        value_patterns: ["2048"]
+      - kind: hcl2
+        attribute: "rsa_bits"
+        value_patterns: ["2048"]
+
+  rsa_4096:
+    name: "RSA-4096 (Classical-Safe)"
+    algorithm: "RSA"
+    primitive: "key_exchange"
+    key_size: 4096
+    description: "RSA-4096 is classically safe. Still quantum-vulnerable; plan PQC migration."
+    weak_by_default: false
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["rsa_bits", "rsa_key_size", "key_size", "key_bits"]
+        value_patterns: ["4096"]
+      - kind: hcl2
+        attribute: "rsa_bits"
+        value_patterns: ["4096"]
+
+  # ─── Certificate Verification Disabled ───────────────────────────────────
+
+  ssl_verify_false:
+    name: "Certificate Verification Disabled"
+    algorithm: "TLS"
+    primitive: "protocol_version"
+    key_size: null
+    description: "Disabling certificate verification bypasses the entire TLS trust model and enables MITM attacks."
+    weak_by_default: true
+    confidence_gain: "high"
+    detectors:
+      - kind: yaml
+        key_patterns: ["verify", "ssl_verify", "tls_verify", "ssl_check_cert",
+                       "verify_ssl", "verify_tls", "verify_certificates"]
+        value_patterns: ["false", "False", "no", "off", "disabled", "0"]
+      - kind: yaml
+        key_patterns: ["insecure", "insecure_skip_verify", "skip_ssl_verification",
+                       "skip_verify", "allow_insecure"]
+        value_patterns: ["true", "True", "yes", "1"]
+      - kind: hcl2
+        attribute_patterns: ["insecure", "skip_credentials_validation",
+                             "skip_requesting_account_id", "skip_cert_verification",
+                             "insecure_skip_verify", "allow_insecure"]
+        value_patterns: ["true"]
+      - kind: nginx
+        directive: "ssl_verify_client"
+        value_contains: ["off"]

@@ -28,6 +28,20 @@ SKIP_DIRS = {
     ".nyc_output",
 }
 
+# File patterns recognised by the config/IaC engine (IAC, C-12).
+# These are glob-style suffix or exact-name patterns used by _is_config_file()
+# in scanner/config_engine.py.  Do NOT modify SKIP_DIRS to accommodate them.
+CONFIG_FILE_PATTERNS: tuple[str, ...] = (
+    "*.yaml",
+    "*.yml",
+    "*.tf",
+    "nginx.conf",
+    "*.conf",
+    "*.json",
+    ".gitlab-ci.yml",
+    ".gitlab-ci.yaml",
+)
+
 
 def _should_skip(path: Path, scan_root: Path | None = None) -> bool:
     """Check whether a path lies below a generated or dependency directory.
@@ -44,3 +58,4 @@ def _should_skip(path: Path, scan_root: Path | None = None) -> bool:
         if part in SKIP_DIRS:
             return True
     return False
+

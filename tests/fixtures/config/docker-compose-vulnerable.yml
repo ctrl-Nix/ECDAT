@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  api:
+    image: myapp:latest
+    environment:
+      # Disabling TLS verification — insecure for testing only
+      - SSL_VERIFY=false
+      - TLS_VERSION=TLSv1.0
+    ports:
+      - "8080:8080"
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: secret
