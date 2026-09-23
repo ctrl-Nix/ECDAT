@@ -48,6 +48,8 @@ services:
       ENABLE_LOCAL_SCAN_API: "false"
       REPORT_SYNC_REQUIRE_MTLS: "true"
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
+      AUTH_BOOTSTRAP_ADMIN_USERNAME: ${AUTH_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD}
     depends_on:
       db:
         condition: service_healthy
