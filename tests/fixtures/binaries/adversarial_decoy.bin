@@ -1,0 +1,4 @@
+# adversarial_decoy.bin
+# This is a plain text file containing cryptographic symbol names in comments:
+# MD5_Init, AES_encrypt, EVP_sha256
+# It has no ELF, PE, or Mach-O magic and must be rejected as an unsupported binary format.
