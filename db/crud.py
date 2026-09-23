@@ -35,6 +35,8 @@ from db.models import (
     CRITICALITIES,
     RISK_TIERS,
     SCAN_STATUSES,
+    ARTIFACT_TYPES,
+    PACKAGE_ECOSYSTEMS,
     Finding,
     Repository,
     Scan,
@@ -115,6 +117,16 @@ _FINDING_KEY_ALIASES: dict[str, str] = {
     "confidenceband": "confidence_band",
     "confidence_signals": "confidence_signals",
     "confidencesignals": "confidence_signals",
+    "artifact_type": "artifact_type",
+    "artifacttype": "artifact_type",
+    "artifact_ref": "artifact_ref",
+    "artifactref": "artifact_ref",
+    "package_ecosystem": "package_ecosystem",
+    "packageecosystem": "package_ecosystem",
+    "package_name": "package_name",
+    "packagename": "package_name",
+    "package_version": "package_version",
+    "packageversion": "package_version",
 }
 
 
@@ -195,6 +207,12 @@ def normalize_finding(finding: dict[str, Any]) -> dict[str, Any]:
 
     crit = str(cols.get("criticality") or "MEDIUM").strip().upper()
     cols["criticality"] = crit if crit in CRITICALITIES else "MEDIUM"
+
+    artifact_type = str(cols.get("artifact_type") or "SOURCE_FILE").strip().upper()
+    cols["artifact_type"] = artifact_type if artifact_type in ARTIFACT_TYPES else "SOURCE_FILE"
+    
+    ecosystem = str(cols.get("package_ecosystem") or "").strip().lower()
+    cols["package_ecosystem"] = ecosystem if ecosystem in PACKAGE_ECOSYSTEMS else None
 
     return cols
 

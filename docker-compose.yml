@@ -14,6 +14,7 @@ services:
       # mount makes new PostgreSQL volumes apply it in init order as well.
       - ./db/migrations/001_secure_reporting.sql:/docker-entrypoint-initdb.d/02_secure_reporting.sql:ro
       - ./db/migrations/002_confidence_scoring.sql:/docker-entrypoint-initdb.d/03_confidence_scoring.sql:ro
+      - ./db/migrations/003_artifact_scanning.sql:/docker-entrypoint-initdb.d/04_artifact_scanning.sql:ro
       - ./db/migrations/004_rbac_users.sql:/docker-entrypoint-initdb.d/05_rbac_users.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]

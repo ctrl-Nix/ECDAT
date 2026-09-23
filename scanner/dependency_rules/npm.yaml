@@ -1,0 +1,22 @@
+ecosystem: npm
+packages:
+  - name: md5
+    library: md5
+    algorithm: MD5
+    primitive: hash
+    weak_by_default: true
+  - name: sha1
+    library: sha1
+    algorithm: SHA-1
+    primitive: hash
+    weak_by_default: true
+  - name: crypto-js
+    library: crypto-js
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: false
+  - name: node-forge
+    library: node-forge
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: false

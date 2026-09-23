@@ -44,6 +44,11 @@ class FindingOut(BaseModel):
     confidence_score: float | None = None
     confidence_band: str | None = None
     confidence_signals: list[str] | None = None
+    artifact_type: str = "SOURCE_FILE"
+    artifact_ref: str | None = None
+    package_ecosystem: str | None = None
+    package_name: str | None = None
+    package_version: str | None = None
     risk_assessment: "RiskAssessmentOut | None" = None
 
 

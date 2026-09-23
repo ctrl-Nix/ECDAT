@@ -88,7 +88,16 @@ CREATE TABLE IF NOT EXISTS findings (
     -- Unified confidence scoring (CONF)
     confidence_score   NUMERIC(3,2),
     confidence_band    TEXT,
-    confidence_signals JSONB
+    confidence_signals JSONB,
+
+    -- Artifact scanning (DEP, CNT, BIN, IAC)
+    artifact_type TEXT NOT NULL DEFAULT 'SOURCE_FILE',
+    artifact_ref TEXT,
+    package_ecosystem TEXT,
+    package_name TEXT,
+    package_version TEXT,
+    image_digest TEXT,
+    layer_digest TEXT
 );
 
 -- Day-4 indexes (owned by Ronak): the dashboard filters findings by scan and
@@ -97,6 +106,10 @@ CREATE INDEX IF NOT EXISTS idx_findings_scan_id  ON findings(scan_id);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(risk_tier);
 CREATE INDEX IF NOT EXISTS idx_findings_source_context ON findings(source_context);
 CREATE INDEX IF NOT EXISTS idx_findings_confidence_band ON findings(confidence_band);
+CREATE INDEX IF NOT EXISTS idx_findings_artifact_type ON findings(artifact_type);
+CREATE INDEX IF NOT EXISTS idx_findings_package
+    ON findings(package_ecosystem, package_name)
+    WHERE package_name IS NOT NULL;
 
 -- Immutable interpretation and custody records. The raw finding remains a
 -- discovery fact; the assessment can be recomputed under a new model version.

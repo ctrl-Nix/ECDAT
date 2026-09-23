@@ -6,6 +6,10 @@ from pathlib import Path
 
 from scanner.confidence import BAND_THRESHOLDS, CONFIDENCE_BANDS
 
+# Maximum bytes a single artefact (manifest, binary, config file) may be
+# before the engine skips it with a warning.  Shared across all engines (C-12).
+SCAN_MAX_ARTIFACT_BYTES: int = 10 * 1024 * 1024  # 10 MB
+
 # Directories to skip during scanning
 SKIP_DIRS = {
     "node_modules",

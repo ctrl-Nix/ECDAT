@@ -1,0 +1,12 @@
+ecosystem: maven
+packages:
+  - name: org.bouncycastle:bcprov-jdk15on
+    library: bouncycastle
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: false
+  - name: org.bouncycastle:bcprov-jdk18on
+    library: bouncycastle
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: false

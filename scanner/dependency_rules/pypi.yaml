@@ -1,0 +1,27 @@
+ecosystem: pypi
+packages:
+  - name: pycrypto
+    library: pycrypto
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: true
+  - name: pycryptodome
+    library: pycryptodome
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: false
+  - name: pycryptodomex
+    library: pycryptodomex
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: false
+  - name: cryptography
+    library: cryptography
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: false
+  - name: pyopenssl
+    library: pyopenssl
+    algorithm: UNKNOWN
+    primitive: library
+    weak_by_default: false

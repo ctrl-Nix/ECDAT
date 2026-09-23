@@ -28,22 +28,33 @@ _TEST_CONTEXT_PARTS = {"test", "tests", "__tests__", "fixtures", "fixture", "spe
 _DEMO_CONTEXT_PARTS = {"demo", "demos", "example", "examples", "sample", "samples"}
 
 
-def scan(target: Path) -> list:
-    """Scan a local file or tree using all registered source-language engines."""
-    rules = multilang_engine.load_rules(RULES_DIR)
-    findings = []
+def _scan_dependency(target: Path) -> list:
+    from scanner import dependency_engine
     if target.is_dir():
-        findings.extend(python_engine.scan_directory(target))
-        findings.extend(multilang_engine.scan_directory(target, rules))
-    elif target.suffix == ".py":
-        findings.extend(python_engine.scan_file(target))
-    elif target.suffix in multilang_engine.EXT_TO_LANG:
-        findings.extend(multilang_engine.scan_file(target, rules))
-    else:
-        print(
-            f"[warn] no engine registered for {target.suffix or '(no extension)'}",
-            file=sys.stderr,
-        )
+        return dependency_engine.scan_directory(target)
+    return dependency_engine.scan_file(target)
+
+def scan(target: Path, scan_types: list[str]) -> list:
+    """Scan a local file or tree using all registered engines specified in scan_types."""
+    findings = []
+    if "source" in scan_types:
+        rules = multilang_engine.load_rules(RULES_DIR)
+        if target.is_dir():
+            findings.extend(python_engine.scan_directory(target))
+            findings.extend(multilang_engine.scan_directory(target, rules))
+        elif target.suffix == ".py":
+            findings.extend(python_engine.scan_file(target))
+        elif target.suffix in multilang_engine.EXT_TO_LANG:
+            findings.extend(multilang_engine.scan_file(target, rules))
+        else:
+            print(
+                f"[warn] no engine registered for {target.suffix or '(no extension)'}",
+                file=sys.stderr,
+            )
+            
+    if "dependency" in scan_types:
+        findings.extend(_scan_dependency(target))
+        
     return findings
 
 
@@ -67,11 +78,13 @@ def _source_context(relative_path: str) -> str:
 
 
 def _prepare_findings(
-    target: Path, redact_paths: bool, shelf_life: float | None, source_context: str | None
+    target: Path, redact_paths: bool, shelf_life: float | None, source_context: str | None, scan_types: list[str]
 ) -> list[dict[str, Any]]:
     root = target if target.is_dir() else target.parent
-    raw = [asdict(finding) for finding in scan(target)]
+    raw = [asdict(finding) for finding in scan(target, scan_types)]
     for finding in raw:
+        if redact_paths and finding.get("artifact_type") == "DEPENDENCY_MANIFEST" and finding.get("artifact_ref"):
+            finding["artifact_ref"] = _relative_or_redacted(finding["artifact_ref"], root, redact_paths)
         finding["file"] = _relative_or_redacted(finding["file"], root, redact_paths)
         finding["source_context"] = source_context or _source_context(finding["file"])
         if shelf_life is not None:
@@ -130,6 +143,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Offline cryptographic asset discovery with optional signed report delivery.",
     )
     parser.add_argument("target", type=Path, help="Local source file or directory to scan.")
+    parser.add_argument(
+        "--scan-type",
+        action="append",
+        choices=("source", "dependency", "config", "binary", "container"),
+        help="Which scanner(s) to run (repeatable). Default: source only."
+    )
     parser.add_argument("--json-out", metavar="PATH", help="Write full scored findings JSON to PATH.")
     parser.add_argument("--summary-only", action="store_true", help="Print only risk counts; never print finding paths.")
     parser.add_argument("--redact-paths", action="store_true", help="Redact paths not relative to the scanned target.")
@@ -172,8 +191,9 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --sync-url requires --report-bundle", file=sys.stderr)
         return 1
 
+    scan_types = args.scan_type or ["source"]
     findings = _prepare_findings(
-        target, args.redact_paths, args.data_shelf_life_years, args.source_context
+        target, args.redact_paths, args.data_shelf_life_years, args.source_context, scan_types
     )
     if args.min_confidence:
         from scanner.confidence import meets_band_threshold

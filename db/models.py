@@ -16,6 +16,8 @@ CRITICALITIES = ("MEDIUM", "HIGH", "CRITICAL")
 CONFIDENCES = ("low", "medium", "high")
 CONFIDENCE_BANDS = ("VERIFIED", "PROBABLE", "UNVERIFIED")
 ROLES = ("SECURITY_ADMIN", "AUDITOR", "DEVELOPER")
+ARTIFACT_TYPES = ("SOURCE_FILE", "DEPENDENCY_MANIFEST", "CONFIG_FILE", "BINARY", "CONTAINER_LAYER")
+PACKAGE_ECOSYSTEMS = ("pypi", "npm", "maven", "deb", "apk", "rpm")
 
 
 class Base(DeclarativeBase):
@@ -98,6 +100,13 @@ class Finding(Base):
     confidence_signals: Mapped[list | None] = mapped_column(
         JSON().with_variant(JSONB(), "postgresql")
     )
+    artifact_type: Mapped[str] = mapped_column(Text, default="SOURCE_FILE", server_default="SOURCE_FILE", nullable=False)
+    artifact_ref: Mapped[str | None] = mapped_column(Text)
+    package_ecosystem: Mapped[str | None] = mapped_column(Text)
+    package_name: Mapped[str | None] = mapped_column(Text)
+    package_version: Mapped[str | None] = mapped_column(Text)
+    image_digest: Mapped[str | None] = mapped_column(Text)
+    layer_digest: Mapped[str | None] = mapped_column(Text)
 
     scan: Mapped["Scan"] = relationship(back_populates="findings")
     risk_assessment: Mapped["RiskAssessment | None"] = relationship(
@@ -109,6 +118,13 @@ class Finding(Base):
         Index("idx_findings_severity", "risk_tier"),
         Index("idx_findings_source_context", "source_context"),
         Index("idx_findings_confidence_band", "confidence_band"),
+        Index("idx_findings_artifact_type", "artifact_type"),
+        Index(
+            "idx_findings_package",
+            "package_ecosystem",
+            "package_name",
+            postgresql_where=text("package_name IS NOT NULL"),
+        ),
     )
 
 

@@ -117,3 +117,28 @@ def test_run_scan_persists_verified_mixed_language_risk_results(tmp_path: Path):
             ("3DES", "HIGH"),
             ("SHA-256", "LOW"),
         }
+
+def test_run_scan_default_ignores_dependency_manifests(tmp_path: Path):
+    target = tmp_path
+    (target / "legacy.py").write_text("import hashlib\nhashlib.md5(b'fixture')\n", encoding="utf-8")
+    (target / "requirements.txt").write_text("pycrypto==2.6.1\n", encoding="utf-8")
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        repository = crud.get_or_create_repository(session, name="fixture")
+        session.flush()
+        queued = crud.start_scan(session, repo_id=repository.id, status="pending")
+        session.flush()
+
+        result = run_scan(session, target_path=str(target), scan_id=queued.id)
+        session.commit()
+
+        assert result["status"] == "completed"
+        assert result["finding_count"] == 1
+
+        findings = crud.get_findings_for_scan(session, scan_id=queued.id)
+        assert len(findings) == 1
+        assert findings[0].algorithm == "MD5"
+        assert findings[0].artifact_type == "SOURCE_FILE"
+
