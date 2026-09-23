@@ -616,15 +616,17 @@ Confidence refers to the **resolution**, not to the existence of the conflict.
 
 ---
 
-### C-20 · The repository contradicts itself about what is in scope
+### C-20 · Scope contradiction — **RESOLVED**
 **Shared resource:** project scope
-**Proposals:** CNT, BIN, IAC all depend on the answer
-**State:** Conflicting, and **not resolvable by an integration architect**. `AGENT_RULES.md` #6 states binary, container and dependency scanning are all in scope as of this sprint. `PRODUCT_DESCRIPTION.md` §5, `README.md` and `docs/SOURCE_SCANNING_SCOPE.md` state they are out of scope and use that restraint as a deliberate pitch differentiator against IBM's CBOMkit split.
-**Resolution:** None proposed. BIN assumed `AGENT_RULES.md` is current and flagged it; that assumption is recorded here, not ratified.
-**Rationale:** This is a product and pitch decision with a judge-facing consequence — the scope-discipline line has presumably already been read. `AGENT_RULES.md` #4 requires stopping rather than guessing.
-**Confidence:** **Low — requires human sign-off before any of CNT, BIN or IAC is merged.**
+**Was:** `AGENT_RULES.md` #6 declared binary, container and dependency scanning in scope, while `PRODUCT_DESCRIPTION.md` §5, `README.md` and `docs/SOURCE_SCANNING_SCOPE.md` declared them out of scope and used that restraint as a pitch differentiator.
+**Resolution (team decision, ratified):** All four new detection engines — dependency, config/IaC, binary, container — are **IN SCOPE**. `AGENT_RULES.md` #6 is the current statement. The three pitch documents have been rewritten to match:
+- `PRODUCT_DESCRIPTION.md` §5 now lists the four engines as in-sprint, and adds two genuine out-of-scope rows (registry pulls, runtime analysis) so the honesty table still has teeth.
+- The "scope discipline" talking point is rewritten around the **one-Finding-contract** architecture and the confidence band, rather than around not building the engines.
+- `docs/SOURCE_SCANNING_SCOPE.md` is now explicitly the *source-code* scope document and cross-references one scope doc per engine.
+- `README.md` §3.3 no longer lists binary/container as planned.
 
----
+**The pitch claim moved, it did not disappear.** The defensible line is no longer "we chose not to build these"; it is "we built them as separate engines behind one contract, and we band their evidence honestly." That claim is only true if C-02 and C-03 hold — inventory findings must reach the database banded `UNVERIFIED`, not be dropped by the `scan_runner` gate and not be relabelled `high`. **If CONF does not land, this resolution must be reverted**, because the honesty table would then describe engines whose output either vanishes or overstates itself.
+**Confidence:** **High** (decision made; no longer awaiting sign-off).
 
 ### C-21 · `install.sh` assumptions contradict two other features
 **Shared resource:** `scripts/install.sh`, `/health` routing, the `ecdat` entrypoint
@@ -791,7 +793,7 @@ Ordering is derived from the resolutions above. Items in the same wave may proce
 | Wave | Merge | Unblocks |
 |---|---|---|
 | **0** | Pin `cryptography` in `requirements.txt`; delete `dashboard/src/api.js`; reserve migration numbers | Everything (C-18, C-08, C-01) |
-| **0** | **Human sign-off on C-20** (scope truth) | CNT, BIN, IAC may not start until this resolves |
+| **0** | ~~Human sign-off on C-20~~ — **RESOLVED**, all four engines in scope | CNT, BIN, IAC, DEP cleared to start |
 | **1** | RBAC (`Principal` contract, `users`, `require_role`) | ENR, AUD, ASP, INS, all analyst routes (C-09) |
 | **1** | CONF phase 1 (signals, scorer, DB, CLI) | DEP, CNT, BIN, IAC (C-02, C-03) |
 | **1** | `cbom_generator` refactor to `build_cbom_from_findings` | CLI, CBV, CNT, BIN, IAC (C-14) |
@@ -813,7 +815,6 @@ Nothing below is decided. Each blocks the listed features.
 
 | # | Question | Blocks | Confidence |
 |---|---|---|---|
-| C-20 | Is binary/container/dependency scanning in scope? `AGENT_RULES.md` says yes; the pitch documents say no and use it as a differentiator | CNT BIN IAC | **Low** |
 | C-24 | Light or dark dashboard theme; is a toggle in scope? | FE TRD CMP | **Low** |
 | C-06 | Time window separating `recent` from `stale` agent delivery | ASP | **Low** |
 | C-02 | Persist or drop sub-threshold findings? | all scanners | **Medium** |
