@@ -1,0 +1,138 @@
+# scanner/rules/container.yaml
+# Container package-inventory rules — maps installed OS and language packages to crypto library assets.
+
+schema: 1
+description: "Container package-inventory rules — maps installed packages to crypto library assets."
+rules:
+  - ecosystem: deb
+    package: libssl3
+    library: openssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: deb
+    package: libssl1.1
+    library: openssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: deb
+    package: openssl
+    library: openssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: deb
+    package: libgcrypt20
+    library: libgcrypt
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: deb
+    package: libnss3
+    library: nss
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: deb
+    package: libwolfssl
+    library: wolfssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: apk
+    package: libcrypto3
+    library: openssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: apk
+    package: libssl3
+    library: openssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: apk
+    package: openssl
+    library: openssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: apk
+    package: libgcrypt
+    library: libgcrypt
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: apk
+    package: mbedtls
+    library: mbedtls
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: rpm
+    package: openssl-libs
+    library: openssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: rpm
+    package: openssl
+    library: openssl
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: rpm
+    package: libgcrypt
+    library: libgcrypt
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: pypi
+    package: cryptography
+    library: cryptography
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: pypi
+    package: pycryptodome
+    library: pycryptodome
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: npm
+    package: node-forge
+    library: node-forge
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: maven
+    package: bcprov-jdk15on
+    library: bouncycastle
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
+
+  - ecosystem: maven
+    package: bcprov-jdk18on
+    library: bouncycastle
+    algorithm: RSA
+    primitive: publicKeyEncryption
+    weak_by_default: false
