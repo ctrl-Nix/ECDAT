@@ -127,6 +127,10 @@ _FINDING_KEY_ALIASES: dict[str, str] = {
     "packagename": "package_name",
     "package_version": "package_version",
     "packageversion": "package_version",
+    "image_digest": "image_digest",
+    "imagedigest": "image_digest",
+    "layer_digest": "layer_digest",
+    "layerdigest": "layer_digest",
 }
 
 
