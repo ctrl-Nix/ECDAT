@@ -26,6 +26,7 @@ import db.crud as crud
 from api.core.rbac import Principal, Role, require_role
 from api.database import get_session
 from api.services.cbom_generator import CBOM_BOM_FORMAT, generate_cbom
+from api.services.cbom_validator import validate_cbom
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ _CBOM_CONTENT_TYPE = "application/vnd.cyclonedx+json"
         },
         400: {"description": "Scan not yet completed."},
         404: {"description": "Scan not found."},
+        500: {"description": "CBOM validation failed."},
     },
 )
 def get_cbom(
@@ -88,6 +90,19 @@ def get_cbom(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Scan {scan_id} not found.",
+        )
+
+    validation = validate_cbom(cbom)
+    if not validation.valid:
+        log.warning(
+            "GET /scans/%d/cbom validation failed: %d issues",
+            scan_id,
+            len(validation.issues),
+        )
+        return Response(
+            content=json.dumps({"error": "CBOM validation failed"}),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            media_type="application/json",
         )
 
     cbom_json = json.dumps(cbom, indent=2, default=str)

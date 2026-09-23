@@ -1,10 +1,27 @@
 # CBV — Docker/3.11 verification queue
 
+## Human Sign-Off on C-14 (Resolved Phase B Contract)
+
+Phase B has been implemented in accordance with explicit human sign-off on contract item C-14:
+1. **Validation Failure Contract:**
+   - When `validate_cbom()` returns `valid=False`, `GET /scans/{scan_id}/cbom` returns HTTP `500 Internal Server Error`.
+   - The response body is strictly sanitized JSON: `{"error": "CBOM validation failed"}`.
+   - No document values, file paths, descriptions, stack traces, or exception details are exposed.
+   - The audit outcome for `ecdat.cbom.export` on validation failure is `"error"`.
+   - No new database tables, migrations, headers, or unrelated routes are added.
+2. **Schema Strictness:**
+   - Enforces the cryptographic-asset subset and ECDAT invariants defined in the v0.1 specification.
+   - Does NOT enforce the full official CycloneDX 1.6 JSON Schema (as generator extensions `x-ecdat-*` and enum names differ from the official schema).
+   - `cbom_generator.py` is unchanged; no `jsonschema` or other external validation libraries added.
+3. **Endpoint Integration:**
+   - `validate_cbom()` is wired into `api/routers/cbom.py` inside `get_cbom()`, between generation and serialization.
+   - Preserves 404 (unknown scan) and 400 (running scan), skipping validation in both cases.
+   - Preserves 200 response with CycloneDX document and Content-Disposition download header when validation succeeds.
+
 ## What I could not verify, and why
 
 - `docker build --tag ecdat-scanner:local .` and `docker run` container verification are deferred because Docker is unavailable on this machine.
 - Multilang JavaScript/Java scanner tests (`tree-sitter-languages` AST parsing) across the whole test suite are deferred because tree-sitter wheels are cp311-only and unavailable on the local Python 3.14 environment.
-- Phase B endpoint wiring (`api/routers/cbom.py` validation branch) is intentionally deferred because contract item C-14 requires human sign-off on the failure contract (HTTP 500 vs HTTP 200 with warning) before runtime behavior can be modified.
 
 ## Exact commands to run, in order
 
@@ -20,18 +37,18 @@ Run from the repository root on the Docker/Python 3.11 machine:
 
 ## Expected output for each
 
-- Command 1: exits `0`; last line begins: `28 passed`.
+- Command 1: exits `0`; last line begins: `34 passed` (28 Phase A unit tests + 6 Phase B endpoint tests).
 - Command 2: exits `0`; prints:
   `['BOM_REF_DUPLICATE', 'CRITICALITY_PROPERTY_INVALID', 'DOCUMENT_NOT_OBJECT', 'FIELD_INVALID_VALUE', 'FIELD_MISSING', 'FIELD_WRONG_TYPE', 'NOT_JSON_SERIALIZABLE', 'RISK_TIER_PROPERTY_INVALID', 'RISK_TIER_PROPERTY_MISSING', 'SUMMARY_TIER_MISMATCH', 'SUMMARY_TOTAL_MISMATCH']`
 - Command 3: exits `0` with no output (verifies zero `re` usage).
 - Command 4: exits `0` with no output (verifies no forbidden imports or schema libraries).
 - Command 5: exits `0`; image `ecdat-scanner:local` successfully built.
-- Command 6: exits `0`; inside container prints `28 passed`.
+- Command 6: exits `0`; inside container prints `34 passed`.
 - Command 7: exits `0`; full test suite passes.
 
 ## What to do if it fails
 
-- Command 1 or 6: Inspect `api/services/cbom_validator.py` (validator logic, Pydantic models, and cross-checks) and `tests/test_cbom_validation.py`.
+- Command 1 or 6: Inspect `api/services/cbom_validator.py`, `api/routers/cbom.py`, and `tests/test_cbom_validation.py`.
 - Command 2: Inspect `api/services/cbom_validator.py` line 34 (`CBOM_ISSUE_CODES`).
 - Command 3: Inspect `api/services/cbom_validator.py` for any accidental regex imports or calls.
 - Command 4: Inspect `api/services/cbom_validator.py` and `requirements.txt` for forbidden imports (`jsonschema`, `fastjsonschema`, `cbom_generator`, or `fastapi`).

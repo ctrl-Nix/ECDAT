@@ -5,15 +5,23 @@ import datetime as dt
 import json
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+import api.routers.cbom as cbom_router
 import db.crud as crud
+from api.core.config import settings
+from api.core.rbac import Principal, Role, encode_token
+from api.database import get_session
+from api.main import app
 from api.services.cbom_generator import generate_cbom
 from api.services.cbom_validator import (
     CBOM_ISSUE_CODES,
     CBOM_VALIDATION_SCOPE,
+    CbomIssue,
+    CbomValidationResult,
     validate_cbom,
 )
 from api.services.risk_engine import score_findings
@@ -331,3 +339,218 @@ def test_issue_messages_never_echo_document_values(real_cbom):
     doc["components"][0]["description"] = sentinel
     res = validate_cbom(doc)
     assert sentinel not in res.model_dump_json()
+
+
+# ---------------------------------------------------------------------------
+# Phase B: Endpoint integration tests (GET /scans/{scan_id}/cbom)
+# ---------------------------------------------------------------------------
+
+
+def _seed_scan_with_findings(engine) -> int:
+    with Session(engine) as session:
+        repo = crud.get_or_create_repository(
+            session, "endpoint-repo", "https://github.com/test/endpoint"
+        )
+        scan = crud.start_scan(session, repo.id)
+        raw_findings = [
+            {
+                "file": "a.py",
+                "line": 3,
+                "algorithm": "MD5",
+                "confidence": "high",
+                "language": "python",
+                "primitive": "hash",
+                "detection_method": "ast_visitor",
+            },
+            {
+                "file": "k.py",
+                "line": 9,
+                "algorithm": "RSA",
+                "key_size": 1024,
+                "confidence": "high",
+                "language": "python",
+                "primitive": "pke",
+                "detection_method": "ast_visitor",
+            },
+            {
+                "file": "c.java",
+                "line": 5,
+                "algorithm": "3DES",
+                "confidence": "high",
+                "language": "java",
+                "detection_method": "tree_sitter_query",
+            },
+            {
+                "file": "e.js",
+                "line": 2,
+                "algorithm": "ECC",
+                "confidence": "unverified",
+                "language": "javascript",
+                "detection_method": "tree_sitter_query",
+                "source_context": "TEST_ONLY",
+            },
+        ]
+        scored = score_findings(raw_findings)
+        crud.save_findings(session, scan.id, scored)
+        crud.complete_scan(session, scan.id)
+        session.commit()
+        return scan.id
+
+
+def auth_headers(role: Role = Role.AUDITOR) -> dict[str, str]:
+    token = encode_token(Principal(1, "auditor", role.value))
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-API-Key": settings.API_KEY or "ci-test-key",
+    }
+
+
+@pytest.fixture()
+def client(engine, monkeypatch):
+    monkeypatch.setattr(settings, "AUTH_JWT_SECRET", "01234567890123456789012345678901")
+
+    def override_get_session():
+        with Session(engine) as s:
+            yield s
+
+    app.dependency_overrides[get_session] = override_get_session
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+
+def test_endpoint_serves_validated_export_unchanged(client, engine, monkeypatch):
+    scan_id = _seed_scan_with_findings(engine)
+
+    spy_called = []
+    orig_validate = cbom_router.validate_cbom
+
+    def spy_validate(cbom_dict):
+        spy_called.append(cbom_dict)
+        return orig_validate(cbom_dict)
+
+    monkeypatch.setattr(cbom_router, "validate_cbom", spy_validate)
+
+    response = client.get(
+        f"/scans/{scan_id}/cbom?download=true",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/vnd.cyclonedx+json"
+    assert (
+        response.headers["content-disposition"]
+        == f'attachment; filename="ecdat-scan-{scan_id}-cbom.json"'
+    )
+    data = response.json()
+    assert len(data.get("components", [])) == 4
+    assert len(spy_called) == 1
+    assert spy_called[0]["bomFormat"] == "CycloneDX"
+
+
+def test_endpoint_unknown_scan_is_404_and_skips_validation(client, monkeypatch):
+    spy_called = []
+    monkeypatch.setattr(
+        cbom_router,
+        "validate_cbom",
+        lambda cbom_dict: spy_called.append(cbom_dict),
+    )
+
+    response = client.get("/scans/9999/cbom", headers=auth_headers())
+    assert response.status_code == 404
+    assert len(spy_called) == 0
+
+
+def test_endpoint_in_progress_scan_is_400_and_skips_validation(
+    client, engine, monkeypatch
+):
+    with Session(engine) as session:
+        repo = crud.get_or_create_repository(
+            session, "running-repo", "https://github.com/test/running"
+        )
+        scan = crud.start_scan(session, repo.id)
+        scan_id = scan.id
+        session.commit()
+
+    spy_called = []
+    monkeypatch.setattr(
+        cbom_router,
+        "validate_cbom",
+        lambda cbom_dict: spy_called.append(cbom_dict),
+    )
+
+    response = client.get(f"/scans/{scan_id}/cbom", headers=auth_headers())
+    assert response.status_code == 400
+    assert len(spy_called) == 0
+
+
+def test_endpoint_invalid_cbom_returns_500_with_sanitized_error(
+    client, engine, monkeypatch
+):
+    scan_id = _seed_scan_with_findings(engine)
+
+    monkeypatch.setattr(
+        cbom_router,
+        "validate_cbom",
+        lambda cbom_dict: CbomValidationResult(
+            valid=False,
+            issues=[
+                CbomIssue(
+                    code="FIELD_INVALID_VALUE",
+                    path="/secret/internal/path",
+                    message="Sensitive internal exception trace detail",
+                )
+            ],
+        ),
+    )
+
+    response = client.get(f"/scans/{scan_id}/cbom", headers=auth_headers())
+    assert response.status_code == 500
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == {"error": "CBOM validation failed"}
+    assert "Sensitive" not in response.text
+    assert "internal" not in response.text
+
+
+def test_validation_failure_does_not_leak_document_values(
+    client, engine, monkeypatch
+):
+    scan_id = _seed_scan_with_findings(engine)
+
+    orig_generate = cbom_router.generate_cbom
+
+    def corrupt_cbom(db, sid):
+        doc = orig_generate(db, sid)
+        doc["bomFormat"] = "INVALID_BOM_FORMAT"
+        doc["components"][0]["description"] = "CONFIDENTIAL_PASSWORD_SECRET_HASH"
+        return doc
+
+    monkeypatch.setattr(cbom_router, "generate_cbom", corrupt_cbom)
+
+    response = client.get(f"/scans/{scan_id}/cbom", headers=auth_headers())
+    assert response.status_code == 500
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == {"error": "CBOM validation failed"}
+    assert "CONFIDENTIAL_PASSWORD_SECRET_HASH" not in response.text
+    assert "INVALID_BOM_FORMAT" not in response.text
+    assert "Traceback" not in response.text
+
+
+def test_validator_is_called_exactly_once(client, engine, monkeypatch):
+    scan_id = _seed_scan_with_findings(engine)
+
+    call_count = 0
+    orig_validate = cbom_router.validate_cbom
+
+    def counting_validate(cbom_dict):
+        nonlocal call_count
+        call_count += 1
+        return orig_validate(cbom_dict)
+
+    monkeypatch.setattr(cbom_router, "validate_cbom", counting_validate)
+
+    response = client.get(f"/scans/{scan_id}/cbom", headers=auth_headers())
+    assert response.status_code == 200
+    assert call_count == 1
+
