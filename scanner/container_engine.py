@@ -20,6 +20,7 @@ import email
 import json
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -47,6 +48,18 @@ from scanner.image_layers import (
 
 RULES_DIR = Path(__file__).resolve().parent / "rules"
 RULES_FILE = RULES_DIR / "container.yaml"
+
+
+@dataclass
+class ContainerFinding(Finding):
+    """Finding subclass adding container-specific artifact fields."""
+    artifact_type: str = "CONTAINER_LAYER"
+    artifact_ref: Optional[str] = None
+    image_digest: Optional[str] = None
+    layer_digest: Optional[str] = None
+    package_ecosystem: Optional[str] = None
+    package_name: Optional[str] = None
+    package_version: Optional[str] = None
 
 
 def _warn(msg: str) -> None:
@@ -162,7 +175,7 @@ def _parse_certificate_data(
             )
 
             findings.append(
-                Finding(
+                ContainerFinding(
                     file=file_label,
                     line=0,
                     matched_call=matched_call,
@@ -178,16 +191,15 @@ def _parse_certificate_data(
                     confidence_band=verdict.band,
                     confidence_signals=verdict.signals,
                     confidence_model_version=verdict.model_version,
+                    artifact_type="CONTAINER_LAYER",
+                    artifact_ref=file_label,
+                    image_digest=image_digest,
+                    layer_digest=layer_digest,
+                    package_ecosystem=None,
+                    package_name=None,
+                    package_version=None,
                 )
             )
-            # Add container metadata attributes
-            findings[-1].artifact_type = "CONTAINER_LAYER"  # type: ignore[attr-defined]
-            findings[-1].artifact_ref = file_label          # type: ignore[attr-defined]
-            findings[-1].image_digest = image_digest        # type: ignore[attr-defined]
-            findings[-1].layer_digest = layer_digest        # type: ignore[attr-defined]
-            findings[-1].package_ecosystem = None           # type: ignore[attr-defined]
-            findings[-1].package_name = None                # type: ignore[attr-defined]
-            findings[-1].package_version = None             # type: ignore[attr-defined]
         except Exception as exc:
             _warn(f"Error extracting certificate properties from {file_label}: {exc}")
 
@@ -229,7 +241,7 @@ def _parse_certificate_data(
             verdict = calculate_confidence_score(signals)
 
             findings.append(
-                Finding(
+                ContainerFinding(
                     file=file_label,
                     line=0,
                     matched_call="serialization.load_pem_private_key",
@@ -245,15 +257,15 @@ def _parse_certificate_data(
                     confidence_band=verdict.band,
                     confidence_signals=verdict.signals,
                     confidence_model_version=verdict.model_version,
+                    artifact_type="CONTAINER_LAYER",
+                    artifact_ref=file_label,
+                    image_digest=image_digest,
+                    layer_digest=layer_digest,
+                    package_ecosystem=None,
+                    package_name=None,
+                    package_version=None,
                 )
             )
-            findings[-1].artifact_type = "CONTAINER_LAYER"  # type: ignore[attr-defined]
-            findings[-1].artifact_ref = file_label          # type: ignore[attr-defined]
-            findings[-1].image_digest = image_digest        # type: ignore[attr-defined]
-            findings[-1].layer_digest = layer_digest        # type: ignore[attr-defined]
-            findings[-1].package_ecosystem = None           # type: ignore[attr-defined]
-            findings[-1].package_name = None                # type: ignore[attr-defined]
-            findings[-1].package_version = None             # type: ignore[attr-defined]
         except Exception:
             pass
 
@@ -354,7 +366,7 @@ def _match_package_rules(
                 ]
                 verdict = calculate_confidence_score(signals)
 
-                f = Finding(
+                f = ContainerFinding(
                     file=f"{layer_digest}:{pkg_name}",
                     line=0,
                     matched_call=f"{ecosystem}:{pkg_name}=={version}",
@@ -370,14 +382,14 @@ def _match_package_rules(
                     confidence_band=verdict.band,
                     confidence_signals=verdict.signals,
                     confidence_model_version=verdict.model_version,
+                    artifact_type="CONTAINER_LAYER",
+                    artifact_ref=f"{layer_digest}:{pkg_name}",
+                    image_digest=image_digest,
+                    layer_digest=layer_digest,
+                    package_ecosystem=ecosystem,
+                    package_name=pkg_name,
+                    package_version=version,
                 )
-                f.artifact_type = "CONTAINER_LAYER"  # type: ignore[attr-defined]
-                f.artifact_ref = f"{layer_digest}:{pkg_name}"  # type: ignore[attr-defined]
-                f.image_digest = image_digest        # type: ignore[attr-defined]
-                f.layer_digest = layer_digest        # type: ignore[attr-defined]
-                f.package_ecosystem = ecosystem      # type: ignore[attr-defined]
-                f.package_name = pkg_name            # type: ignore[attr-defined]
-                f.package_version = version          # type: ignore[attr-defined]
                 findings.append(f)
 
     return findings
