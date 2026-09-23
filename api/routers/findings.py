@@ -71,6 +71,11 @@ def list_findings(
         description="Filter by risk tier: CRITICAL, HIGH, MEDIUM, or LOW.",
         pattern="^(CRITICAL|HIGH|MEDIUM|LOW)$",
     ),
+    min_band: str | None = Query(
+        None,
+        description="Return findings whose confidence_band meets or exceeds this level.",
+        pattern="^(VERIFIED|PROBABLE|UNVERIFIED)$",
+    ),
     limit: int = Query(50, ge=1, le=200, description="Max findings per page."),
     offset: int = Query(0, ge=0, description="Pagination offset."),
 ) -> Any:
@@ -86,6 +91,7 @@ def list_findings(
         db,
         scan_id=scan_id,
         risk_tier=risk_tier,
+        min_band=min_band,
         limit=limit,
         offset=offset,
     )

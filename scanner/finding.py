@@ -9,7 +9,7 @@ Adding a new language later means: emit this dataclass from the new
 engine. Nothing downstream changes.
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Optional
 
 
@@ -31,5 +31,11 @@ class Finding:
     key_size: Optional[int] = None
     detection_method: str = "static_analysis"
 
+    # ── CONF additions (one-time extension per contract §1.1, C-03) ─────────
+    confidence_score: float = 0.0
+    confidence_band: str = "UNVERIFIED"
+    confidence_signals: list[str] = field(default_factory=list)
+    confidence_model_version: str = "conf-1.0.0"
+
     def to_dict(self) -> dict:
-        return asdict(self)
+        return asdict(self)

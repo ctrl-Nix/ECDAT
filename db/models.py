@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
 
 SCAN_STATUSES = ("pending", "running", "completed", "failed")
 RISK_TIERS = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
 CRITICALITIES = ("MEDIUM", "HIGH", "CRITICAL")
 CONFIDENCES = ("low", "medium", "high")
+CONFIDENCE_BANDS = ("VERIFIED", "PROBABLE", "UNVERIFIED")
 
 
 class Base(DeclarativeBase):
     pass
+
 
 
 class Repository(Base):
@@ -73,6 +77,11 @@ class Finding(Base):
     risk_tier: Mapped[str | None] = mapped_column(Text)
     risk_reason: Mapped[str | None] = mapped_column(Text)
     criticality: Mapped[str] = mapped_column(Text, default="MEDIUM")
+    confidence_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
+    confidence_band: Mapped[str | None] = mapped_column(Text)
+    confidence_signals: Mapped[list | None] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql")
+    )
 
     scan: Mapped["Scan"] = relationship(back_populates="findings")
     risk_assessment: Mapped["RiskAssessment | None"] = relationship(
@@ -82,6 +91,8 @@ class Finding(Base):
     __table_args__ = (
         Index("idx_findings_scan_id", "scan_id"),
         Index("idx_findings_severity", "risk_tier"),
+        Index("idx_findings_source_context", "source_context"),
+        Index("idx_findings_confidence_band", "confidence_band"),
     )
 
 

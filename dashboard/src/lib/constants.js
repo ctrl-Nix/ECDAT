@@ -11,6 +11,13 @@ export const riskColors = {
   LOW: 'var(--risk-low)',
 };
 
+export const CONFIDENCE_BANDS = ["VERIFIED", "PROBABLE", "UNVERIFIED"];
+export const CONFIDENCE_BAND_LABELS = {
+  VERIFIED: "Verified",
+  PROBABLE: "Probable",
+  UNVERIFIED: "Unverified",
+};
+
 export const mockScans = [
   {
     id: 101,
@@ -47,6 +54,9 @@ export const mockFindings = [
     severity: 'CRITICAL',
     risk_tier: 'CRITICAL',
     confidence: 'high',
+    confidence_band: 'VERIFIED',
+    confidence_score: 0.90,
+    confidence_signals: ['import_resolved', 'call_site_matched', 'expected_module_confirmed', 'literal_algorithm_arg'],
     date: '2026-08-22',
     summary: 'Legacy MD5 hash used for password verification.',
   },
@@ -57,7 +67,10 @@ export const mockFindings = [
     line: 15,
     severity: 'HIGH',
     risk_tier: 'HIGH',
-    confidence: 'medium',
+    confidence: 'unverified',
+    confidence_band: 'PROBABLE',
+    confidence_score: 0.70,
+    confidence_signals: ['call_site_matched', 'rule_yaml_matched'],
     date: '2026-08-21',
     summary: 'RSA key length below 2048-bit requirement.',
   },
@@ -68,7 +81,10 @@ export const mockFindings = [
     line: 88,
     severity: 'MEDIUM',
     risk_tier: 'MEDIUM',
-    confidence: 'low',
+    confidence: 'unverified',
+    confidence_band: 'UNVERIFIED',
+    confidence_score: 0.35,
+    confidence_signals: ['dynamic_algorithm_arg'],
     date: '2026-08-20',
     summary: 'Weak hash used in token signing flow.',
   },
@@ -80,7 +96,11 @@ export const mockFindings = [
     severity: 'LOW',
     risk_tier: 'LOW',
     confidence: 'high',
+    confidence_band: 'VERIFIED',
+    confidence_score: 0.85,
+    confidence_signals: ['import_resolved', 'call_site_matched'],
     date: '2026-08-19',
     summary: 'AES-128 configuration still present in legacy service.',
   },
 ];
+

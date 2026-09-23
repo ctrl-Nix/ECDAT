@@ -83,9 +83,14 @@ def _prepare_findings(
 def _summary(findings: list[dict[str, Any]]) -> dict[str, int]:
     result = {tier: 0 for tier in _TIER_ORDER}
     result["total"] = len(findings)
+    for band in ("VERIFIED", "PROBABLE", "UNVERIFIED"):
+        result[band] = 0
     for finding in findings:
         tier = str(finding.get("risk_tier", "UNSCORED")).upper()
         result[tier if tier in result else "UNSCORED"] += 1
+        band = finding.get("confidence_band")
+        if band in result:
+            result[band] += 1
     return result
 
 
@@ -132,6 +137,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-context", choices=("SOURCE", "TEST_ONLY", "DEMO_ONLY"),
         help="Declare the whole scan target's context; overrides path-based test/demo labeling.",
     )
+    parser.add_argument(
+        "--min-confidence",
+        choices=("VERIFIED", "PROBABLE", "UNVERIFIED"),
+        default=None,
+        help="Drop findings whose confidence_band is below this level before printing. "
+             "Independent of --fail-on.",
+    )
     parser.add_argument("--fail-on", choices=("CRITICAL", "HIGH", "MEDIUM", "LOW"), help="Exit 2 when a finding meets or exceeds this tier.")
     parser.add_argument("--data-shelf-life-years", type=float, help="Explicit PQC/HNDL assumption applied to this scan.")
     parser.add_argument("--report-bundle", metavar="PATH", help="Write a signed bundle for later dashboard delivery.")
@@ -163,7 +175,14 @@ def main(argv: list[str] | None = None) -> int:
     findings = _prepare_findings(
         target, args.redact_paths, args.data_shelf_life_years, args.source_context
     )
+    if args.min_confidence:
+        from scanner.confidence import meets_band_threshold
+        findings = [
+            f for f in findings
+            if meets_band_threshold(f.get("confidence_band", "UNVERIFIED") or "UNVERIFIED", args.min_confidence)
+        ]
     summary = _summary(findings)
+
     result: dict[str, Any] = {"summary": summary, "findings": findings}
 
     if args.report_bundle:
@@ -210,8 +229,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_out:
         # Keep the legacy artifact contract: integrations receive a JSON array
         # of findings, while the signed report bundle holds richer metadata.
-        Path(args.json_out).write_text(json.dumps(findings, indent=2), encoding="utf-8")
+        out_path = Path(args.json_out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(findings, indent=2), encoding="utf-8")
     return 2 if _violates_policy(findings, args.fail_on) else 0
+
 
 
 if __name__ == "__main__":

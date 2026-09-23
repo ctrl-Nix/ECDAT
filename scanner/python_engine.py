@@ -13,6 +13,11 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from scanner.confidence import (
+    ConfidenceSignal,
+    calculate_confidence_score,
+    legacy_confidence_for,
+)
 from scanner.finding import Finding
 
 
@@ -160,47 +165,85 @@ class CryptoVisitor(ast.NodeVisitor):
                 return arg.value
         return None
 
+    def _is_alias_traced(self, func: ast.expr) -> bool:
+        current = func
+        while isinstance(current, ast.Attribute):
+            current = current.value
+        if isinstance(current, ast.Name):
+            imported = self.aliases.get(current.id)
+            if imported and imported != current.id:
+                return True
+        return False
+
     def _source_snippet(self, node: ast.Call) -> str:
         try:
             return ast.unparse(node)
         except Exception:
             return self.source_lines[node.lineno - 1].strip()
 
+    def _emit_finding(self, node: ast.Call, rule: dict, key_size: Optional[int], signals: list[str]) -> None:
+        verdict = calculate_confidence_score(signals)
+        self.findings.append(Finding(
+            file=self.filename,
+            line=node.lineno,
+            matched_call=self._source_snippet(node),
+            library=rule["library"],
+            algorithm=rule["algorithm"],
+            primitive=rule["primitive"],
+            language="python",
+            weak_by_default=rule["algorithm"] in WEAK_ALGORITHMS,
+            confidence=legacy_confidence_for(verdict.band),
+            key_size=key_size,
+            detection_method="ast_static_analysis",   # scanner-lane owns §3.2 rename separately
+            confidence_score=verdict.score,
+            confidence_band=verdict.band,
+            confidence_signals=verdict.signals,
+            confidence_model_version=verdict.model_version,
+        ))
+
     def visit_Call(self, node: ast.Call):
         candidates = self._resolve_call_candidates(node.func)
         rule = None
+        has_literal_arg = False
         if candidates:
             for candidate in candidates:
                 if candidate in CALL_RULES:
                     rule = CALL_RULES[candidate]
+                    has_literal_arg = True
                     break
 
             if rule is None and "hashlib.new" in candidates:
-                algorithm = HASHLIB_NEW_ALGORITHMS.get((self._first_string_arg(node) or "").lower())
-                if algorithm:
-                    rule = {"algorithm": algorithm, "primitive": "hash", "library": "hashlib"}
+                first_arg = self._first_string_arg(node)
+                if first_arg is not None:
+                    has_literal_arg = True
+                    algorithm = HASHLIB_NEW_ALGORITHMS.get(first_arg.lower())
+                    if algorithm:
+                        rule = {"algorithm": algorithm, "primitive": "hash", "library": "hashlib"}
             if rule is None and "hmac.new" in candidates:
-                algorithm = HASHLIB_NEW_ALGORITHMS.get((self._hmac_digest_name(node) or "").lower())
-                if algorithm:
-                    rule = {"algorithm": algorithm, "primitive": "mac", "library": "hmac"}
+                digest_name = self._hmac_digest_name(node)
+                if digest_name is not None:
+                    has_literal_arg = True
+                    algorithm = HASHLIB_NEW_ALGORITHMS.get(digest_name.lower())
+                    if algorithm:
+                        rule = {"algorithm": algorithm, "primitive": "mac", "library": "hmac"}
 
         if rule:
             key_size = self._extract_key_size(node) if rule["algorithm"] in {"RSA", "ECC", "DSA"} else None
-            self.findings.append(Finding(
-                file=self.filename,
-                line=node.lineno,
-                matched_call=self._source_snippet(node),
-                library=rule["library"],
-                algorithm=rule["algorithm"],
-                primitive=rule["primitive"],
-                language="python",
-                weak_by_default=rule["algorithm"] in WEAK_ALGORITHMS,
-                confidence="high",  # Emitted candidates are explicit-import-backed.
-                key_size=key_size,
-                detection_method="ast_static_analysis",
-            ))
+            signals = [
+                ConfidenceSignal.IMPORT_RESOLVED.value,
+                ConfidenceSignal.CALL_SITE_MATCHED.value,
+                ConfidenceSignal.EXPECTED_MODULE_CONFIRMED.value,
+            ]
+            if has_literal_arg:
+                signals.append(ConfidenceSignal.LITERAL_ALGORITHM_ARG.value)
+            if self._is_alias_traced(node.func):
+                signals.append(ConfidenceSignal.ALIAS_TRACED.value)
+            if key_size is not None:
+                signals.append(ConfidenceSignal.KEY_SIZE_EXTRACTED.value)
+            self._emit_finding(node, rule, key_size, signals)
 
         self.generic_visit(node)
+
 
 
 def scan_file(path: Path) -> list:

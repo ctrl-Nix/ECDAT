@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from api.services.risk_engine import score_findings
 from db.models import (
+    CONFIDENCE_BANDS,
     CRITICALITIES,
     RISK_TIERS,
     SCAN_STATUSES,
@@ -71,6 +72,12 @@ _FINDING_KEY_ALIASES: dict[str, str] = {
     "riskreason": "risk_reason",
     "reason": "risk_reason",
     "criticality": "criticality",
+    "confidence_score": "confidence_score",
+    "confidencescore": "confidence_score",
+    "confidence_band": "confidence_band",
+    "confidenceband": "confidence_band",
+    "confidence_signals": "confidence_signals",
+    "confidencesignals": "confidence_signals",
 }
 
 
@@ -81,6 +88,38 @@ def _coerce_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _coerce_band(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    val_str = str(value).strip().upper()
+    return val_str if val_str in CONFIDENCE_BANDS else None
+
+
+def _coerce_score(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_signals(value: Any) -> list[str] | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+            return None
+        except (ValueError, TypeError):
+            return None
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value]
+    return None
 
 
 def normalize_finding(finding: dict[str, Any]) -> dict[str, Any]:
@@ -99,7 +138,16 @@ def normalize_finding(finding: dict[str, Any]) -> dict[str, Any]:
     cols["line"] = 0 if line is None else line          # column is NOT NULL
     cols["key_size"] = _coerce_int(cols.get("key_size"))
 
-    cols["confidence"] = str(cols.get("confidence") or "high").strip().lower()
+    band = _coerce_band(cols.get("confidence_band"))
+    cols["confidence_band"] = band
+    cols["confidence_score"] = _coerce_score(cols.get("confidence_score"))
+    cols["confidence_signals"] = _coerce_signals(cols.get("confidence_signals"))
+
+    if band is not None:
+        from scanner.confidence import legacy_confidence_for
+        cols["confidence"] = legacy_confidence_for(band)
+    else:
+        cols["confidence"] = str(cols.get("confidence") or "high").strip().lower()
 
     tier = cols.get("risk_tier")
     if tier is None or str(tier).strip() == "":
@@ -112,6 +160,7 @@ def normalize_finding(finding: dict[str, Any]) -> dict[str, Any]:
     cols["criticality"] = crit if crit in CRITICALITIES else "MEDIUM"
 
     return cols
+
 
 
 # ---------------------------------------------------------------------------
@@ -308,16 +357,25 @@ def get_findings_for_scan(
     session: Session,
     scan_id: int,
     risk_tier: str | None = None,
+    min_band: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Finding]:
-    """Findings for a scan, optionally filtered by risk tier.
+    """Findings for a scan, optionally filtered by risk tier and/or min_band.
 
-    Uses idx_findings_scan_id (and idx_findings_severity when filtered).
+    Uses idx_findings_scan_id (and idx_findings_severity / idx_findings_confidence_band).
     """
     stmt = select(Finding).where(Finding.scan_id == scan_id)
     if risk_tier:
         stmt = stmt.where(Finding.risk_tier == risk_tier.strip().upper())
+    if min_band:
+        upper_band = min_band.strip().upper()
+        if upper_band == "VERIFIED":
+            stmt = stmt.where(Finding.confidence_band == "VERIFIED")
+        elif upper_band == "PROBABLE":
+            stmt = stmt.where(Finding.confidence_band.in_(["VERIFIED", "PROBABLE"]))
+        elif upper_band == "UNVERIFIED":
+            stmt = stmt.where(Finding.confidence_band.in_(["VERIFIED", "PROBABLE", "UNVERIFIED"]))
     stmt = stmt.order_by(Finding.id).offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)

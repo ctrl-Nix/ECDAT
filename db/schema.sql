@@ -70,7 +70,12 @@ CREATE TABLE IF NOT EXISTS findings (
     -- PS 26164 requires classification by type, lifetime and business
     -- criticality. This column is reserved from Day 1 so no one has to touch
     -- DB/API/frontend again later to add it.
-    criticality TEXT DEFAULT 'MEDIUM'   -- CRITICAL / HIGH / MEDIUM
+    criticality TEXT DEFAULT 'MEDIUM',   -- CRITICAL / HIGH / MEDIUM
+
+    -- Unified confidence scoring (CONF)
+    confidence_score   NUMERIC(3,2),
+    confidence_band    TEXT,
+    confidence_signals JSONB
 );
 
 -- Day-4 indexes (owned by Ronak): the dashboard filters findings by scan and
@@ -78,6 +83,7 @@ CREATE TABLE IF NOT EXISTS findings (
 CREATE INDEX IF NOT EXISTS idx_findings_scan_id  ON findings(scan_id);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(risk_tier);
 CREATE INDEX IF NOT EXISTS idx_findings_source_context ON findings(source_context);
+CREATE INDEX IF NOT EXISTS idx_findings_confidence_band ON findings(confidence_band);
 
 -- Immutable interpretation and custody records. The raw finding remains a
 -- discovery fact; the assessment can be recomputed under a new model version.

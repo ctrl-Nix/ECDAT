@@ -28,20 +28,26 @@ WEAK = [
     ("AES", 256, "LOW"),
 ]
 CRITICALITIES = ("MEDIUM", "HIGH", "CRITICAL")
+CONFIDENCE_BANDS = ("VERIFIED", "PROBABLE", "UNVERIFIED")
 
 
 def _fake_finding(i: int) -> dict:
     algo, key_size, tier = random.choice(WEAK)
+    band = random.choice(CONFIDENCE_BANDS)
+    score_map = {"VERIFIED": 0.90, "PROBABLE": 0.70, "UNVERIFIED": 0.30}
     return {
         "file": f"src/module_{i % 40}/file_{i}.py",
         "line": random.randint(1, 400),
         "algorithm": algo,
         "key_size": key_size,
-        "confidence": random.choice(["high", "medium"]),
+        "confidence_band": band,
+        "confidence_score": score_map[band],
+        "confidence_signals": ["call_site_matched", "rule_yaml_matched"],
         "risk_tier": tier,
         "risk_reason": f"{algo} is deprecated / quantum-vulnerable.",
         "criticality": random.choice(CRITICALITIES),
     }
+
 
 
 def main() -> int:

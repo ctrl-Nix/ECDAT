@@ -17,7 +17,9 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import {
   mockFindings, mockScans, mockCbom, trendData, donutData,
 } from '../../mockData.js';
+import ConfidenceStamp from '../../components/ConfidenceStamp.jsx';
 import api from '../../lib/api';
+
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const STATUS_STYLE = {
@@ -208,11 +210,13 @@ function FindingPanel({ finding, onClose }) {
             <span style={{ color: 'var(--t2)' }}>Line</span>
             <span className="num" style={{ color: 'var(--t1)' }}>{finding.line}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span style={{ color: 'var(--t2)' }}>Confidence</span>
-            <span className="flex items-center gap-1.5 capitalize" style={{ color: 'var(--t1)' }}>
-              <ConfidenceDot level={finding.confidence} /> {finding.confidence}
-            </span>
+            <ConfidenceStamp
+              band={finding.confidence_band || (finding.confidence === 'high' ? 'VERIFIED' : 'UNVERIFIED')}
+              score={finding.confidence_score}
+              signals={finding.confidence_signals}
+            />
           </div>
           <div className="flex justify-between">
             <span style={{ color: 'var(--t2)' }}>Classical broken</span>
@@ -502,9 +506,11 @@ function FindingsTab({ onSelectFinding }) {
                 <td className="mono" style={{ color: 'var(--t1)' }}>{f.file}</td>
                 <td className="num" style={{ color: 'var(--t2)' }}>{f.line}</td>
                 <td>
-                  <span className="flex items-center gap-1.5 capitalize" style={{ color: 'var(--t2)' }}>
-                    <ConfidenceDot level={f.confidence} />{f.confidence}
-                  </span>
+                  <ConfidenceStamp
+                    band={f.confidence_band || (f.confidence === 'high' ? 'VERIFIED' : 'UNVERIFIED')}
+                    score={f.confidence_score}
+                    signals={f.confidence_signals}
+                  />
                 </td>
                 <td>
                   {f.quantum_vulnerable

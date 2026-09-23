@@ -29,11 +29,31 @@ from sqlalchemy.orm import Session
 import db.crud as crud
 from api.core.config import settings
 from api.services.risk_engine import score_findings
+from scanner.confidence import CONFIDENCE_BANDS, meets_band_threshold
 
 log = logging.getLogger(__name__)
 
 # Maximum bytes we will read from scanner stdout to guard against runaway output.
 _MAX_STDOUT_BYTES = 10 * 1024 * 1024  # 10 MB
+
+_MIN_BAND: str = os.environ.get("SCAN_MIN_CONFIDENCE_BAND", "PROBABLE")
+if _MIN_BAND not in CONFIDENCE_BANDS:
+    log.warning("Invalid SCAN_MIN_CONFIDENCE_BAND=%r; falling back to PROBABLE", _MIN_BAND)
+    _MIN_BAND = "PROBABLE"
+
+
+def _passes_gate(finding: dict) -> bool:
+    min_band = os.environ.get("SCAN_MIN_CONFIDENCE_BAND", _MIN_BAND)
+    if min_band not in CONFIDENCE_BANDS:
+        min_band = "PROBABLE"
+    band = finding.get("confidence_band")
+    if not band:
+        if finding.get("confidence") == "high":
+            band = "VERIFIED"
+        else:
+            band = "UNVERIFIED"
+    return meets_band_threshold(band, min_band)
+
 
 
 # ---------------------------------------------------------------------------
@@ -94,17 +114,14 @@ def run_scan(
         # 3. Invoke scanner subprocess.
         raw_findings = _invoke_scanner(target, scan_id, errors)
 
-        # 4. Score only evidence-backed findings.  The scanner itself emits
-        # high-confidence findings only, but retaining this guard prevents raw
-        # or future scanner adapters from turning ambiguous matches into report
-        # assertions.
+        # 4. Score only evidence-backed findings meeting minimum confidence band.
         verified_findings = [
             finding for finding in raw_findings
-            if finding.get("confidence") == "high"
+            if _passes_gate(finding)
         ]
         if len(verified_findings) != len(raw_findings):
             log.info(
-                "Scan %d withheld %d non-high-confidence finding(s) from risk scoring",
+                "Scan %d withheld %d sub-threshold finding(s) from risk scoring",
                 scan_id,
                 len(raw_findings) - len(verified_findings),
             )

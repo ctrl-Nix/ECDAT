@@ -41,7 +41,11 @@ class FindingOut(BaseModel):
     weak_by_default: bool | None = None
     detection_method: str | None = None
     source_context: str = "SOURCE"
+    confidence_score: float | None = None
+    confidence_band: str | None = None
+    confidence_signals: list[str] | None = None
     risk_assessment: "RiskAssessmentOut | None" = None
+
 
 
 class RiskAssessmentOut(BaseModel):

@@ -4,6 +4,8 @@ ECDAT Scanner -- shared constants and utilities.
 
 from pathlib import Path
 
+from scanner.confidence import BAND_THRESHOLDS, CONFIDENCE_BANDS
+
 # Directories to skip during scanning
 SKIP_DIRS = {
     "node_modules",

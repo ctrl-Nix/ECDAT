@@ -61,8 +61,14 @@ except ImportError:
 # Use the canonical Finding model shared by all engines.
 # This guarantees that Python-engine and multilang-engine output are
 # structurally identical and can be merged safely by ``scanner/cli.py``.
+from scanner.confidence import (
+    ConfidenceSignal,
+    calculate_confidence_score,
+    legacy_confidence_for,
+)
 from scanner.constants import SKIP_DIRS, _should_skip
 from scanner.finding import Finding
+
 
 __all__ = [
     "load_rules",
@@ -686,6 +692,21 @@ def scan_file(path: Path, rules_by_lang: Dict[str, List[dict]]) -> List[Finding]
             if key_size is None and lang_key == "java":
                 key_size = _extract_chained_key_size(call_node, source)
 
+            signals = [
+                ConfidenceSignal.IMPORT_RESOLVED.value,
+                ConfidenceSignal.CALL_SITE_MATCHED.value,
+                ConfidenceSignal.EXPECTED_MODULE_CONFIRMED.value,
+                ConfidenceSignal.RULE_YAML_MATCHED.value,
+            ]
+            if expected_arg:
+                signals.append(ConfidenceSignal.LITERAL_ALGORITHM_ARG.value)
+            if key_size is not None:
+                signals.append(ConfidenceSignal.KEY_SIZE_EXTRACTED.value)
+            if source_module and source_module != object_name:
+                signals.append(ConfidenceSignal.ALIAS_TRACED.value)
+
+            verdict = calculate_confidence_score(signals)
+
             findings.append(
                 Finding(
                     file=str(path),
@@ -696,9 +717,13 @@ def scan_file(path: Path, rules_by_lang: Dict[str, List[dict]]) -> List[Finding]
                     primitive=rule["primitive"],
                     language=lang_key,
                     weak_by_default=rule["weak_by_default"],
-                    confidence="high",  # Every emitted multilang finding is explicit-import-backed.
+                    confidence=legacy_confidence_for(verdict.band),
                     key_size=key_size,
                     detection_method="tree_sitter_query",
+                    confidence_score=verdict.score,
+                    confidence_band=verdict.band,
+                    confidence_signals=verdict.signals,
+                    confidence_model_version=verdict.model_version,
                 )
             )
             break  # first matching rule wins per call site
