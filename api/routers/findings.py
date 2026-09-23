@@ -10,7 +10,7 @@ Endpoints per ARCHITECTURE.md §2.3:
   GET /scans/{scan_id}/findings/{finding_id}
       — single finding detail (used by remediation panel click-through)
 
-Security: X-API-Key required on every route.
+Security: analyst routes require a bearer token with the appropriate RBAC role.
 This router is a thin HTTP wrapper — all query logic lives in db/crud.py.
 """
 

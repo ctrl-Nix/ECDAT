@@ -8,9 +8,16 @@
 - No `lief`-dependent RBAC test exists; binary tests, if added by the integrated branch, require `lief` on the Docker/Python 3.11 environment.
 - The legacy remediation regression test now runs locally with a Developer JWT; API-key assertions remain only on service-caller coverage.
 
+## Local verification status
+
+- **IMPLEMENTED and locally verified:** `tests/test_api.py`, `tests/test_secure_report_sync.py`, `tests/test_rbac.py`, and `tests/test_security_controls.py`: `19 passed`.
+- **IMPLEMENTED and locally verified:** Python-only CRUD, confidence, remediation, LLM, CLI, and Python scan-runner tests: `35 passed`.
+- **IMPLEMENTED but UNVERIFIED/ENVIRONMENT-BLOCKED:** JavaScript/Java scanner tests and mixed-language scan orchestration. The full suite reports 16 failures because `tree-sitter-languages` is unavailable on Python 3.14; run them on Python 3.11 with the dependency set from `requirements.txt`.
+- **UNVERIFIED/ENVIRONMENT-BLOCKED:** Docker Compose, Postgres migration/initdb ordering, backend container login, curl authorization flow, and dashboard container/browser flow. Docker is unavailable locally; use the exact commands below on the Docker/Python 3.11 machine.
+
 ## Exact commands to run, in order
 
-Run from the repository root on the Docker/Python 3.11 machine.
+Run from the repository root on the Docker/Python 3.11 machine. Items marked Docker-only are intentionally `UNVERIFIED/ENVIRONMENT-BLOCKED` locally.
 
 1. `export AUTH_JWT_SECRET=01234567890123456789012345678901 AUTH_BOOTSTRAP_ADMIN_USERNAME=admin AUTH_BOOTSTRAP_ADMIN_PASSWORD=ChangeMe123!`
 2. `python -m pytest tests/test_rbac.py -v`

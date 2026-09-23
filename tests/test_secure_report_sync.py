@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from api.core.config import settings
+from api.core.rbac import Principal, Role, encode_token
 from api.database import get_session
 from api.main import app
 from api.services.report_bundle import build_bundle, public_key_to_base64, sign_bundle
@@ -47,7 +48,7 @@ def test_signed_report_sync_persists_pqc_evidence_and_cbom(monkeypatch):
     private_key = Ed25519PrivateKey.generate()
     monkeypatch.setattr(settings, "REPORT_SYNC_AGENT_KEYS", {"agent-001": public_key_to_base64(private_key)})
     monkeypatch.setattr(settings, "REPORT_SYNC_REQUIRE_MTLS", True)
-    monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "AUTH_JWT_SECRET", "01234567890123456789012345678901")
 
     def override_session():
         with Session(engine) as session:
@@ -68,13 +69,15 @@ def test_signed_report_sync_persists_pqc_evidence_and_cbom(monkeypatch):
         assert replay.status_code == 201
         assert replay.json()["accepted"] is False
 
-        scan = client.get(f"/scans/{accepted['scan_id']}", headers={"X-API-Key": "test-api-key"})
+        token = encode_token(Principal(1, "auditor", Role.AUDITOR.value))
+        auth_headers = {"Authorization": f"Bearer {token}"}
+        scan = client.get(f"/scans/{accepted['scan_id']}", headers=auth_headers)
         assert scan.status_code == 200
         rsa = next(item for item in scan.json()["findings"] if item["algorithm"] == "RSA")
         assert rsa["risk_assessment"]["quantum_vulnerable"] is True
         assert rsa["risk_assessment"]["hndl_exposure"] == "HIGH"
 
-        cbom = client.get(f"/scans/{accepted['scan_id']}/cbom", headers={"X-API-Key": "test-api-key"})
+        cbom = client.get(f"/scans/{accepted['scan_id']}/cbom", headers=auth_headers)
         assert cbom.status_code == 200
         body = cbom.json()
         assert body["x-ecdat-report-provenance"]["bundle_digest"] == bundle["bundle_digest"]

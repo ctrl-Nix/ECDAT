@@ -9,7 +9,7 @@ Endpoints per ARCHITECTURE.md §2.3:
       ?download=true  — add Content-Disposition: attachment header so the
                         browser/curl saves it as a .json file.
 
-Security: X-API-Key required.
+Security: this analyst route requires a bearer token with an allowed RBAC role.
 This router calls cbom_generator.generate_cbom() — no business logic here.
 """
 

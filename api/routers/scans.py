@@ -6,7 +6,7 @@ Endpoints per ARCHITECTURE.md §2.3:
   GET  /scans          → paginated list of scans (optional repo_id filter)
   GET  /scans/{id}     → scan metadata + findings + risk summary
 
-Security: all routes require X-API-Key via the get_api_key dependency.
+Security: analyst routes require a bearer token with the appropriate RBAC role.
 The POST /scans target_path is resolved and validated server-side inside
 scan_runner._validate_path() — never shell-interpolated.
 """
