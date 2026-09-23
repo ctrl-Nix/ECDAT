@@ -34,4 +34,10 @@ except Exception:
     def scan_config(*args, **kwargs):
         raise RuntimeError("config scanner unavailable; engine failed to import")
 
-__all__ = ["scan_cli", "Finding", "scan_python", "scan_multilang", "scan_dependency", "scan_config"]
+try:
+    from scanner.binary_engine import scan_file as scan_binary
+except Exception:  # pragma: no cover - dependency may be absent
+    def scan_binary(*args, **kwargs):
+        raise RuntimeError("binary scanner unavailable; install lief")
+
+__all__ = ["scan_cli", "Finding", "scan_python", "scan_multilang", "scan_dependency", "scan_config", "scan_binary"]

@@ -10,6 +10,11 @@ from scanner.confidence import BAND_THRESHOLDS, CONFIDENCE_BANDS
 # before the engine skips it with a warning.  Shared across all engines (C-12).
 SCAN_MAX_ARTIFACT_BYTES: int = 10 * 1024 * 1024  # 10 MB
 
+# Directories to skip during binary directory traversal (BIN, C-12).
+BINARY_SKIP_DIRS: set[str] = {
+    ".git", "__pycache__", ".pytest_cache", "node_modules",
+}
+
 # Directories to skip during scanning
 SKIP_DIRS = {
     "node_modules",
