@@ -1,0 +1,211 @@
+# scanner/rules/binary.yaml
+# Declarative detection rules for binary scanning (BIN feature).
+# Loaded by scanner.multilang_engine.load_rules() via standard language: + rules: schema.
+
+language: "binary"
+rules:
+  # ─── Tier 1: Symbols (Imported / Exported / Dynamic Symbols) ─────────────────
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "MD5_Init"
+    algorithm: "MD5"
+    primitive: "hash"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "MD5_Update"
+    algorithm: "MD5"
+    primitive: "hash"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "EVP_md5"
+    algorithm: "MD5"
+    primitive: "hash"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "SHA1_Init"
+    algorithm: "SHA-1"
+    primitive: "hash"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "EVP_sha1"
+    algorithm: "SHA-1"
+    primitive: "hash"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "SHA256_Init"
+    algorithm: "SHA-256"
+    primitive: "hash"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "EVP_sha256"
+    algorithm: "SHA-256"
+    primitive: "hash"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "AES_encrypt"
+    algorithm: "AES"
+    primitive: "encrypt"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "AES_set_encrypt_key"
+    algorithm: "AES"
+    primitive: "encrypt"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "EVP_aes_256_gcm"
+    algorithm: "AES"
+    primitive: "encrypt"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "DES_set_key"
+    algorithm: "DES"
+    primitive: "encrypt"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "DES_ecb_encrypt"
+    algorithm: "DES"
+    primitive: "encrypt"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "RC4"
+    algorithm: "RC4"
+    primitive: "encrypt"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "RC4_set_key"
+    algorithm: "RC4"
+    primitive: "encrypt"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: true
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "RSA_public_encrypt"
+    algorithm: "RSA"
+    primitive: "key_exchange"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "RSA_generate_key_ex"
+    algorithm: "RSA"
+    primitive: "key_exchange"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "libcrypto"
+    algorithm: "UNKNOWN"
+    primitive: "library_link"
+    library: "OpenSSL/libcrypto"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  - tier: 1
+    match_type: "symbol"
+    match_pattern: "libssl"
+    algorithm: "TLS"
+    primitive: "protocol_version"
+    library: "OpenSSL/libssl"
+    weak_by_default: false
+    expected_format: ["ELF", "PE", "MachO"]
+
+  # ─── Tier 2: Constant Signatures ─────────────────────────────────────────────
+
+  - tier: 2
+    match_type: "constant"
+    match_pattern_hex: "637c777bf26b6fc53001672bfed7ab76"
+    algorithm: "AES"
+    primitive: "encrypt"
+    library: "unknown"
+    weak_by_default: false
+
+  - tier: 2
+    match_type: "constant"
+    match_pattern_hex: "0123456789abcdeffedcba9876543210"
+    algorithm: "MD5"
+    primitive: "hash"
+    library: "unknown"
+    weak_by_default: true
+
+  - tier: 2
+    match_type: "constant"
+    match_pattern_hex: "67452301efcdab8998badcfe10325476"
+    algorithm: "MD5"
+    primitive: "hash"
+    library: "unknown"
+    weak_by_default: true
+
+  - tier: 2
+    match_type: "constant"
+    match_pattern_hex: "67452301efcdab8998badcfe10325476c3d2e1f0"
+    algorithm: "SHA-1"
+    primitive: "hash"
+    library: "unknown"
+    weak_by_default: true
+
+  - tier: 2
+    match_type: "constant"
+    match_pattern_hex: "0e040d01020f0b08030a060c05090007"
+    algorithm: "DES"
+    primitive: "encrypt"
+    library: "unknown"
+    weak_by_default: true
