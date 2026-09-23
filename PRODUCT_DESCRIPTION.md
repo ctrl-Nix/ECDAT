@@ -93,7 +93,7 @@ Enterprise CI pipeline                Engineer workstation
 | Proprietary report formats | **CycloneDX 1.6 CBOM** — industry-standard, machine-readable |
 | "AI-powered" black-box risk scores | **Documented, rule-based** scoring — auditable, deterministic |
 
-**Judge-ready line:** *"IBM's own CBOMkit research splits source-code detection and binary/container detection into two separate tools. We made the same architectural decision — source-code detection is a genuinely different technique, and we chose to do it correctly rather than fake both."*
+**Judge-ready line:** *"IBM's CBOMkit splits source-code detection and binary/container detection into separate tools because they are genuinely different techniques. We built them as separate engines behind one Finding contract — four detectors, one schema, one risk model. The confidence band tells you which technique produced each finding, so we never launder a package listing into the same certainty as a traced call site."*
 
 ---
 
@@ -109,7 +109,12 @@ Enterprise CI pipeline                Engineer workstation
 | Risk engine + CBOM generator | ✅ Built & tested | "The deterministic risk engine computes quantum risk tiers and generates CycloneDX 1.6 CBOM" |
 | Dashboard (React + Recharts + Vite) | ✅ Built (Demo Mode) | "Interactive visualization dashboard with trend charts, risk breakdowns, and CBOM viewer" |
 | CI/CD gate workflow | ✅ Built & tested | "GitHub Actions workflow enforces `--fail-on HIGH` policy and blocks non-compliant PR merges" |
-| Binary/container scanning | ❌ Out of scope | "The architecture extends to binaries and containers — source-code detection is our validated foundation" |
+| Binary scanning (heuristic, ELF/PE/Mach-O) | 🚧 In this sprint | "Symbol-table and linked-library evidence. We report linkage, not proof of use — that distinction is in the confidence band" |
+| Container image scanning (tarball / OCI layout) | 🚧 In this sprint | "Offline layer inspection: certificates parsed for real key sizes, plus OS and language package inventory. We never mount the Docker socket" |
+| Third-party dependency scanning | 🚧 In this sprint | "Manifest and lockfile inventory for Python, Node and Java, normalised into the same Finding contract" |
+| Config/IaC crypto scanning | 🚧 In this sprint | "TLS versions, weak ciphers and disabled verification in Kubernetes, Compose, Terraform, Nginx and CI config" |
+| Registry pulls (`ecdat scan nginx:latest`) | ❌ Out of scope | "Deliberately offline. A registry pull would break the self-hosted, no-egress guarantee that is the point of the tool" |
+| Runtime / dynamic analysis | ❌ Out of scope | "Every finding is static evidence. We never claim a finding executes" |
 
 **Critical honesty rule:** Never claim "zero false positives." Say: *"False positives are minimized through AST context-awareness."*
 
@@ -146,7 +151,9 @@ Enterprise CI pipeline                Engineer workstation
 - *"We treat our findings data with the same rigor we're asking enterprises to apply to their own cryptography. Findings require authentication to read, and our CI logs only ever expose a pass/fail summary publicly, never per-finding detail."*
 
 ### On Scope Discipline
-- *"Binary and container scanning are architecturally scoped out — the Finding schema is designed to accept those modules, but source-code detection and binary detection are genuinely different techniques. IBM's CBOMkit splits them into separate tools too. For a 6-day hackathon, we chose to do source-code detection correctly rather than both poorly."*
+- *"We run five detection engines — source AST, dependency manifests, config/IaC, binaries and container layers — and every one of them emits the same `Finding` contract, so the risk engine, CBOM generator and dashboard never learned about the new inputs. That is the architectural claim, and it is the reason adding four engines did not become four forks of the pipeline."*
+- *"What we deliberately did not do is pretend they carry equal weight. A traced call site in Python source is `VERIFIED`. An `openssl` package present in a container image is `UNVERIFIED` — it proves the library is installed, not that RSA-1024 is used. Both are stored, both are exported, and the band travels with the finding into the CBOM. Collapsing that distinction is how scanners get a reputation for noise."*
+- *"Still out of scope on purpose: registry pulls and any runtime analysis. Both would break the no-egress guarantee or claim something static evidence cannot support."*
 
 ### On False Positives
 - *"We don't claim zero false positives — we claim they're minimized through AST context-awareness. Our negative tests prove it: a comment containing 'MD5' and a variable named `legacy_hash_unused` produce exactly zero findings."*

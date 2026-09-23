@@ -86,8 +86,9 @@ Enterprise CI/CD Pipeline                     Engineer Workstation / Isolated Ru
 - **Gateway Certificate Lifecycle Automation:** The Nginx edge gateway (`deploy/nginx/nginx.conf`) enforces mTLS and TLS termination, but certificates (`deploy/tls/`) are currently manually provisioned rather than managed via automated PKI/ACME enrollment.
 
 ### 3.3 Planned (Future Additions)
+- **Registry-backed container scanning:** Image scanning currently accepts a `docker save` tarball or OCI layout only. Pulling directly from a registry is deliberately excluded — it would break the no-egress guarantee — and would need an explicit opt-in design.
+- **Compiled-artifact depth:** Binary scanning covers ELF/PE/Mach-O symbol tables and linked libraries. Statically linked, stripped or packed binaries (typical Go and Rust builds) defeat symbol-table analysis and are documented as a non-claim.
 - **Automated Demo Codebase Generator (`scripts/generate_demo_repo.py`):** The script exists as a 4-line stub with TODO notes. Full automated generation of a multi-language vulnerable demo repository is planned.
-- **Binary and Container Cryptographic Inspection:** Extending detection to compiled JARs, shared libraries, and container layers (source-code AST is the validated current scope).
 - **Automated VCS Pull Request Bot:** GitHub/GitLab bot commenting directly on PR lines with remediation suggestions rather than only failing builds.
 - **Enterprise SSO / RBAC:** Enterprise OIDC/SAML authentication for multi-tenant team access.
 

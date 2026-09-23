@@ -599,7 +599,7 @@ Confidence refers to the **resolution**, not to the existence of the conflict.
 **Shared resource:** `requirements.txt`
 **Proposals:** BIN (`lief`), IAC (`python-hcl2`), RBAC (`PyJWT`, `pwdlib[argon2]`), CNT and CLI (pin `cryptography`), CBV (possibly a schema validator)
 **State:** Conflicting, plus a live defect: `api/services/report_bundle.py` imports `cryptography` for Ed25519 signing and verification, and `cryptography` **is not in `requirements.txt`**. The signed-bundle security story currently rests on a transitive dependency.
-**Resolution:** One grouped diff owned by the backend lane. Pin `cryptography` explicitly and immediately — this is independent of all 17 features. `lief` and `python-hcl2` must be wheel-verified against `python:3.11-slim` before merge (`tree-sitter-languages` already constrains this project to 3.11). CBV uses Pydantic v2, already present, rather than adding a JSON-schema library.
+**Resolution:** One grouped diff owned by the backend lane. Add `cryptography>=46.0.0` to `requirements.txt` immediately — this is independent of all 17 features. Use a floor, not `==`: every other line in that file uses a floor, and a crypto-discovery tool shipping a two-year-old `cryptography` is indefensible in front of judges. `lief` and `python-hcl2` must be wheel-verified against `python:3.11-slim` before merge (`tree-sitter-languages` already constrains this project to 3.11). CBV uses Pydantic v2, already present, rather than adding a JSON-schema library.
 **Rationale:** An unpinned dependency underneath tamper-evidence is a supply-chain claim the project cannot currently defend.
 **Confidence:** **High** on pinning `cryptography`.
 **→ Medium and needs sign-off:** `lief` specifically. It is a native parser pointed at untrusted binaries inside a `cap_drop: [ALL]`, `read_only: true` container. BIN's own fallback (`pyelftools` + `pefile` + `macholib`, pure Python) trades one API for three but removes a native parsing surface. Security review call.
@@ -792,7 +792,7 @@ Ordering is derived from the resolutions above. Items in the same wave may proce
 
 | Wave | Merge | Unblocks |
 |---|---|---|
-| **0** | Pin `cryptography` in `requirements.txt`; delete `dashboard/src/api.js`; reserve migration numbers | Everything (C-18, C-08, C-01) |
+| **0** | Add `cryptography>=46.0.0` to `requirements.txt`; delete `dashboard/src/api.js`; add `AGENTS.md` | Everything (C-18, C-08) |
 | **0** | ~~Human sign-off on C-20~~ — **RESOLVED**, all four engines in scope | CNT, BIN, IAC, DEP cleared to start |
 | **1** | RBAC (`Principal` contract, `users`, `require_role`) | ENR, AUD, ASP, INS, all analyst routes (C-09) |
 | **1** | CONF phase 1 (signals, scorer, DB, CLI) | DEP, CNT, BIN, IAC (C-02, C-03) |
