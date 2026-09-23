@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 
 /* ── Schema ────────────────────────────────────────────────────────────── */
 const loginSchema = z.object({
-  email: z.string().email('Enter a valid enterprise email'),
+  username: z.string().min(1, 'Enter your username'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
@@ -128,7 +128,7 @@ export default function LoginForm() {
   const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [formData, setFormData] = useState({ username: '', password: '' });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -139,20 +139,15 @@ export default function LoginForm() {
       setErrors({});
       setIsLoading(true);
 
-      // Fake network delay for authentic feel
-      await new Promise(r => setTimeout(r, 600));
-
-      const success = login(formData.email, formData.password);
-      if (success) {
-        navigate('/dashboard');
-      } else {
-        setErrors({ form: 'Invalid credentials. Use demo account.' });
-      }
+      await login(formData.username, formData.password);
+      navigate('/dashboard');
     } catch (err) {
       if (err instanceof z.ZodError) {
         const fieldErrors = {};
         err.errors.forEach(e => { fieldErrors[e.path[0]] = e.message; });
         setErrors(fieldErrors);
+      } else {
+        setErrors({ form: err.message || 'Login failed' });
       }
     } finally {
       setIsLoading(false);
@@ -160,7 +155,7 @@ export default function LoginForm() {
   };
 
   const handleDemoFill = () => {
-    setFormData({ email: 'analyst@ecdat.local', password: 'quantum-secure' });
+    setFormData({ username: 'admin', password: 'ChangeMe123!' });
     setErrors({});
   };
 
@@ -239,15 +234,15 @@ export default function LoginForm() {
               )}
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold uppercase tracking-wider block" style={{ color: 'var(--t3)' }}>Work Email</label>
+                <label className="text-xs font-semibold uppercase tracking-wider block" style={{ color: 'var(--t3)' }}>Username</label>
                 <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData(s => ({ ...s, email: e.target.value }))}
-                  placeholder="analyst@enterprise.com"
-                  className={`field mono ${errors.email ? 'error' : ''}`}
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData(s => ({ ...s, username: e.target.value }))}
+                  placeholder="admin"
+                  className={`field mono ${errors.username ? 'error' : ''}`}
                 />
-                {errors.email && <p className="text-xs mt-1" style={{ color: 'var(--critical)' }}>{errors.email}</p>}
+                {errors.username && <p className="text-xs mt-1" style={{ color: 'var(--critical)' }}>{errors.username}</p>}
               </div>
 
               <div className="space-y-1">

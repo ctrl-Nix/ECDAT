@@ -3,34 +3,37 @@
 from fastapi.testclient import TestClient
 
 from api.core.config import settings
+from api.core.rbac import Principal, Role, encode_token
 from api.main import app
 
 
 def test_missing_api_configuration_fails_closed(monkeypatch):
     monkeypatch.setattr(settings, "API_KEY", None)
     response = TestClient(app).get("/scans")
-    assert response.status_code == 503
-    assert response.json()["detail"] == "API authentication is not configured"
+    assert response.status_code == 401
+    assert "Bearer" in response.json()["detail"]
 
 
 def test_server_local_scan_creation_is_disabled_by_default(monkeypatch):
-    monkeypatch.setattr(settings, "API_KEY", "test-key")
+    monkeypatch.setattr(settings, "AUTH_JWT_SECRET", "01234567890123456789012345678901")
     monkeypatch.setattr(settings, "ENABLE_LOCAL_SCAN_API", False)
+    token = encode_token(Principal(1, "developer", Role.DEVELOPER.value))
     response = TestClient(app).post(
         "/scans",
         json={"target_path": "/an-unreachable-local-path"},
-        headers={"X-API-Key": "test-key"},
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
     assert "offline CLI" in response.json()["detail"]
 
 
 def test_state_changing_requests_require_json_content_type(monkeypatch):
-    monkeypatch.setattr(settings, "API_KEY", "test-key")
+    monkeypatch.setattr(settings, "AUTH_JWT_SECRET", "01234567890123456789012345678901")
+    token = encode_token(Principal(1, "developer", Role.DEVELOPER.value))
     response = TestClient(app).post(
         "/scans",
         content=b'{"target_path":"/tmp"}',
-        headers={"X-API-Key": "test-key"},
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 415
     assert response.json()["detail"] == "Content-Type must be application/json"
