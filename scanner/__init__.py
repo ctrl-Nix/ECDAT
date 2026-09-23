@@ -40,4 +40,14 @@ except Exception:  # pragma: no cover - dependency may be absent
     def scan_binary(*args, **kwargs):
         raise RuntimeError("binary scanner unavailable; install lief")
 
-__all__ = ["scan_cli", "Finding", "scan_python", "scan_multilang", "scan_dependency", "scan_config", "scan_binary"]
+try:
+    from scanner.container_engine import scan_directory as _scan_cnt_dir, scan_file as _scan_cnt_file
+    def scan_container(target, rules=None):
+        if getattr(target, "is_dir", lambda: False)():
+            return _scan_cnt_dir(target, rules)
+        return _scan_cnt_file(target, rules)
+except Exception:
+    def scan_container(*args, **kwargs):
+        raise RuntimeError("container scanner unavailable; engine failed to import")
+
+__all__ = ["scan_cli", "Finding", "scan_python", "scan_multilang", "scan_dependency", "scan_config", "scan_binary", "scan_container"]

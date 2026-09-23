@@ -15,6 +15,13 @@ BINARY_SKIP_DIRS: set[str] = {
     ".git", "__pycache__", ".pytest_cache", "node_modules",
 }
 
+# Container layer paths to skip during file iteration (CNT, §7.6).
+CONTAINER_LAYER_SKIP_PATHS: frozenset[str] = frozenset({
+    "proc", "sys", "dev", "run",
+    "usr/share/doc", "usr/share/man", "usr/share/locale",
+    "var/cache", "var/log",
+})
+
 # Directories to skip during scanning
 SKIP_DIRS = {
     "node_modules",
