@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import ssl
 import sys
 from dataclasses import asdict
@@ -20,6 +21,7 @@ import httpx
 from api.services.report_bundle import build_bundle, load_private_key, sign_bundle
 from api.services.risk_engine import score_findings
 from scanner import multilang_engine, python_engine
+from scanner.constants import SCAN_MAX_ARTIFACT_BYTES
 
 
 RULES_DIR = Path(__file__).resolve().parent / "rules"
@@ -50,7 +52,19 @@ def _scan_binary(target: Path) -> list:
         return binary_engine.scan_directory(target)
     return binary_engine.scan_file(target)
 
-def scan(target: Path, scan_types: list[str]) -> list:
+def _scan_container(target: Path, image_tar: Path | None = None) -> list:
+    from scanner import container_engine
+    max_bytes = int(os.environ.get("SCAN_MAX_ARTIFACT_BYTES", SCAN_MAX_ARTIFACT_BYTES))
+    path_to_scan = image_tar or target
+    if path_to_scan.is_file():
+        return container_engine.scan_image_tar(path_to_scan, max_bytes=max_bytes)
+    elif path_to_scan.is_dir():
+        if (path_to_scan / "index.json").is_file():
+            return container_engine.scan_oci_layout(path_to_scan, max_bytes=max_bytes)
+        return container_engine.scan_directory(path_to_scan)
+    return container_engine.scan_file(path_to_scan)
+
+def scan(target: Path, scan_types: list[str], image_tar: Path | None = None) -> list:
     """Scan a local file or tree using all registered engines specified in scan_types."""
     findings = []
     if "source" in scan_types:
@@ -76,6 +90,9 @@ def scan(target: Path, scan_types: list[str]) -> list:
 
     if "binary" in scan_types:
         findings.extend(_scan_binary(target))
+
+    if "container" in scan_types:
+        findings.extend(_scan_container(target, image_tar))
         
     return findings
 
@@ -100,18 +117,22 @@ def _source_context(relative_path: str) -> str:
 
 
 def _prepare_findings(
-    target: Path, redact_paths: bool, shelf_life: float | None, source_context: str | None, scan_types: list[str]
+    target: Path, redact_paths: bool, shelf_life: float | None, source_context: str | None, scan_types: list[str], image_tar: Path | None = None
 ) -> list[dict[str, Any]]:
     root = target if target.is_dir() else target.parent
-    raw = [asdict(finding) for finding in scan(target, scan_types)]
+    raw = [asdict(finding) for finding in scan(target, scan_types, image_tar=image_tar)]
     for finding in raw:
         if finding.get("detection_method") in ("binary_symbol_table", "binary_constant_scan"):
             finding["artifact_type"] = "BINARY"
             finding["artifact_ref"] = finding.get("matched_call", "")
         artifact_type = finding.get("artifact_type", "")
-        if redact_paths and artifact_type in ("DEPENDENCY_MANIFEST", "CONFIG_FILE") and finding.get("artifact_ref"):
+        if artifact_type == "CONTAINER_LAYER":
+            # Container findings preserve their layer:path reference
+            pass
+        elif redact_paths and artifact_type in ("DEPENDENCY_MANIFEST", "CONFIG_FILE") and finding.get("artifact_ref"):
             finding["artifact_ref"] = _relative_or_redacted(finding["artifact_ref"], root, redact_paths)
-        finding["file"] = _relative_or_redacted(finding["file"], root, redact_paths)
+        if artifact_type != "CONTAINER_LAYER":
+            finding["file"] = _relative_or_redacted(finding["file"], root, redact_paths)
         finding["source_context"] = source_context or _source_context(finding["file"])
         if shelf_life is not None:
             finding["data_shelf_life_years"] = shelf_life
@@ -168,12 +189,19 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ecdat",
         description="Offline cryptographic asset discovery with optional signed report delivery.",
     )
-    parser.add_argument("target", type=Path, help="Local source file or directory to scan.")
+    parser.add_argument("target", type=Path, nargs="?", default=None, help="Local source file or directory to scan.")
     parser.add_argument(
         "--scan-type",
         action="append",
         choices=("source", "dependency", "config", "binary", "container"),
         help="Which scanner(s) to run (repeatable). Default: source only."
+    )
+    parser.add_argument(
+        "--image-tar",
+        metavar="PATH",
+        type=Path,
+        help="OCI image tarball (docker save) or OCI image-layout directory. "
+             "Only valid with --scan-type container.",
     )
     parser.add_argument("--json-out", metavar="PATH", help="Write full scored findings JSON to PATH.")
     parser.add_argument("--summary-only", action="store_true", help="Print only risk counts; never print finding paths.")
@@ -206,7 +234,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    target = args.target.resolve()
+    if args.image_tar:
+        target = args.image_tar.resolve()
+    elif args.target:
+        target = args.target.resolve()
+    else:
+        print("error: target or --image-tar is required", file=sys.stderr)
+        return 1
+
     if not target.exists():
         print(f"error: target does not exist: {target}", file=sys.stderr)
         return 1
@@ -218,9 +253,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     scan_types = args.scan_type or ["source"]
-    findings = _prepare_findings(
-        target, args.redact_paths, args.data_shelf_life_years, args.source_context, scan_types
-    )
+    try:
+        findings = _prepare_findings(
+            target, args.redact_paths, args.data_shelf_life_years, args.source_context, scan_types, image_tar=args.image_tar
+        )
+    except Exception as exc:
+        print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
     if args.min_confidence:
         from scanner.confidence import meets_band_threshold
         findings = [

@@ -2,13 +2,14 @@
 ECDAT Scanner -- shared constants and utilities.
 """
 
+import os
 from pathlib import Path
 
 from scanner.confidence import BAND_THRESHOLDS, CONFIDENCE_BANDS
 
-# Maximum bytes a single artefact (manifest, binary, config file) may be
-# before the engine skips it with a warning.  Shared across all engines (C-12).
-SCAN_MAX_ARTIFACT_BYTES: int = 10 * 1024 * 1024  # 10 MB
+# Maximum bytes a single artefact (manifest, binary, config file, container layer) may be.
+# Shared across all engines (C-12, contract §3.3). Default 2 GiB per spec §7.6.
+SCAN_MAX_ARTIFACT_BYTES: int = int(os.environ.get("SCAN_MAX_ARTIFACT_BYTES", 2 * 1024 * 1024 * 1024))
 
 # Directories to skip during binary directory traversal (BIN, C-12).
 BINARY_SKIP_DIRS: set[str] = {
