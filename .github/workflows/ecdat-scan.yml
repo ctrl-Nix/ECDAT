@@ -37,6 +37,12 @@ jobs:
           result=$?
           test "$result" -eq 2
 
+      - name: Verify container image scanning smoke
+        run: |
+          docker run --rm \
+            --entrypoint python ecdat-scanner:${{ github.sha }} \
+            -m scanner.cli --scan-type container --image-tar tests/fixtures/container/alpine_libcrypto.tar
+
   dashboard-production-check:
     name: Dashboard build and production dependency audit
     runs-on: ubuntu-latest

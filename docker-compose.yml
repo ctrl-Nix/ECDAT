@@ -59,6 +59,8 @@ services:
     cap_drop: [ALL]
     read_only: true
     tmpfs: [/tmp]
+    # volumes:
+    #   - ./scans/images:/images:ro  # Read-only bind mount for container image tarballs
 
   dashboard:
     build:
