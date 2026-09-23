@@ -6,6 +6,7 @@
 - The browser login/logout flow is deferred because Docker is unavailable; the dashboard production build was verified locally with `npm run build`.
 - JavaScript/Java scanner tests are deferred because `tree-sitter-languages` is unavailable in the local Python 3.14 environment.
 - No `lief`-dependent RBAC test exists; binary tests, if added by the integrated branch, require `lief` on the Docker/Python 3.11 environment.
+- The legacy remediation regression test now runs locally with a Developer JWT; API-key assertions remain only on service-caller coverage.
 
 ## Exact commands to run, in order
 
