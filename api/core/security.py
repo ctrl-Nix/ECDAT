@@ -10,6 +10,7 @@ from fastapi import Header, HTTPException, Request, Security, status
 from fastapi.security.api_key import APIKeyHeader
 
 from api.core.config import settings
+from api.core.rbac import require_role
 
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 

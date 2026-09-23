@@ -18,6 +18,9 @@ import os
 import random
 import time
 
+from api.core.config import settings
+from api.core.rbac import Role
+
 WEAK = [
     ("MD5", None, "CRITICAL"),
     ("SHA1", None, "HIGH"),
@@ -29,6 +32,22 @@ WEAK = [
 ]
 CRITICALITIES = ("MEDIUM", "HIGH", "CRITICAL")
 CONFIDENCE_BANDS = ("VERIFIED", "PROBABLE", "UNVERIFIED")
+
+
+def bootstrap_demo_admin(db) -> None:
+    """Create the configured bootstrap admin when a password is supplied."""
+    from db.crud import create_user, get_user_by_username
+
+    if not settings.AUTH_BOOTSTRAP_ADMIN_PASSWORD:
+        raise ValueError("AUTH_BOOTSTRAP_ADMIN_PASSWORD is not configured")
+    username = settings.AUTH_BOOTSTRAP_ADMIN_USERNAME
+    if get_user_by_username(db, username) is None:
+        create_user(
+            db,
+            username=username,
+            password=settings.AUTH_BOOTSTRAP_ADMIN_PASSWORD,
+            role=Role.SECURITY_ADMIN.value,
+        )
 
 
 def _fake_finding(i: int) -> dict:
@@ -72,6 +91,8 @@ def main() -> int:
     print(f"Connected: {engine.url}")
 
     with Session(engine) as session:
+        if settings.AUTH_BOOTSTRAP_ADMIN_PASSWORD:
+            bootstrap_demo_admin(session)
         repo = crud.get_or_create_repository(
             session, name="seed-repo", url="https://example.com/seed"
         )

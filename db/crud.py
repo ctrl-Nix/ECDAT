@@ -23,6 +23,7 @@ so small scanner-output variations don't break a scan write.
 from __future__ import annotations
 
 import json
+from pwdlib import PasswordHash
 from typing import Any
 
 from sqlalchemy import func, select
@@ -39,7 +40,43 @@ from db.models import (
     Scan,
     RiskAssessment,
     Report,
+    User,
 )
+
+pwd_context = PasswordHash.recommended()
+
+
+def get_user_by_username(session: Session, username: str) -> User | None:
+    """Return an account by its unique username."""
+    return session.scalars(select(User).where(User.username == username)).first()
+
+
+def verify_password(plain_password: str, password_hash: str) -> bool:
+    """Verify a password without exposing hashing errors to login callers."""
+    try:
+        return pwd_context.verify(plain_password, password_hash)
+    except Exception:
+        return False
+
+
+def create_user(
+    session: Session,
+    username: str,
+    password: str,
+    role: str,
+    organization_id: str | None = None,
+) -> User:
+    """Create an account with an Argon2 password hash."""
+    user = User(
+        username=username,
+        password_hash=pwd_context.hash(password),
+        role=role,
+        organization_id=organization_id,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
 
 # Maps every accepted incoming key (lower-cased, spaces stripped) to a column.
 _FINDING_KEY_ALIASES: dict[str, str] = {

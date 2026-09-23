@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import db.crud as crud
-from api.core.security import get_api_key
+from api.core.rbac import Principal, Role, require_role
 from api.core.config import settings
 from api.database import get_session
 from api.models import FindingOut, RiskSummary, ScanOut, ScanWithFindings
@@ -125,7 +125,7 @@ def create_scan(
     body: ScanCreateRequest,
     background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_session)],
-    _key: Annotated[str, Depends(get_api_key)],
+    user: Annotated[Principal, Depends(require_role(Role.DEVELOPER))],
 ) -> ScanCreateResponse:
     """POST /scans — create and queue a scan."""
     if not settings.ENABLE_LOCAL_SCAN_API:
@@ -175,7 +175,7 @@ def create_scan(
 )
 def list_scans(
     db: Annotated[Session, Depends(get_session)],
-    _key: Annotated[str, Depends(get_api_key)],
+    user: Annotated[Principal, Depends(require_role(Role.AUDITOR, Role.DEVELOPER, Role.SECURITY_ADMIN))],
     repo_id: int | None = Query(None, description="Filter by repository ID."),
     limit: int = Query(50, ge=1, le=200, description="Max results per page."),
 ) -> ScanListResponse:
@@ -197,7 +197,7 @@ def list_scans(
 def get_scan(
     scan_id: int,
     db: Annotated[Session, Depends(get_session)],
-    _key: Annotated[str, Depends(get_api_key)],
+    user: Annotated[Principal, Depends(require_role(Role.AUDITOR, Role.DEVELOPER, Role.SECURITY_ADMIN))],
     risk_tier: str | None = Query(
         None,
         description="Optional filter: only return findings at this risk tier (CRITICAL/HIGH/MEDIUM/LOW).",

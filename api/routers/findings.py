@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import db.crud as crud
-from api.core.security import get_api_key
+from api.core.rbac import Principal, Role, require_role
 from api.database import get_session
 from api.models import FindingOut, RiskSummary
 
@@ -65,7 +65,7 @@ class FindingsPageResponse(BaseModel):
 def list_findings(
     scan_id: int,
     db: Annotated[Session, Depends(get_session)],
-    _key: Annotated[str, Depends(get_api_key)],
+    user: Annotated[Principal, Depends(require_role(Role.AUDITOR, Role.DEVELOPER, Role.SECURITY_ADMIN))],
     risk_tier: str | None = Query(
         None,
         description="Filter by risk tier: CRITICAL, HIGH, MEDIUM, or LOW.",
@@ -122,7 +122,7 @@ def get_finding(
     scan_id: int,
     finding_id: int,
     db: Annotated[Session, Depends(get_session)],
-    _key: Annotated[str, Depends(get_api_key)],
+    user: Annotated[Principal, Depends(require_role(Role.AUDITOR, Role.DEVELOPER, Role.SECURITY_ADMIN))],
 ) -> Any:
     """GET /scans/{scan_id}/findings/{finding_id} — single finding."""
     # Verify scan exists first for a clean 404 message

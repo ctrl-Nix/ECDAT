@@ -8,13 +8,13 @@ backed by deterministic rule-based cryptographic remediation tables and automati
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 import httpx
 from sqlalchemy.orm import Session
 
 from api.core.config import settings
-from api.core.security import get_api_key
+from api.core.rbac import Principal, Role, require_role
 from api.database import get_session
 from api.models import RemediationOut, RemediationRequest
 from db import crud
@@ -319,10 +319,10 @@ async def health():
 async def get_remediation_for_finding(
     scan_id: int,
     finding_id: int,
+    user: Annotated[Principal, Depends(require_role(Role.AUDITOR, Role.DEVELOPER, Role.SECURITY_ADMIN))],
     provider: Optional[str] = Query(None, description="Optional provider ('gemini', 'openai', 'grok', 'groq', 'nvidia', 'ollama')"),
     model: Optional[str] = Query(None, description="Optional model identifier override"),
     db: Session = Depends(get_session),
-    _key: str = Depends(get_api_key),
 ):
     """
     Get remediation recommendation for a specific finding in its owning scan.
@@ -356,7 +356,7 @@ async def get_remediation_for_finding(
 @router.post("/remediation/generate", response_model=RemediationOut)
 async def generate_remediation_direct(
     req: RemediationRequest,
-    _key: str = Depends(get_api_key),
+    user: Annotated[Principal, Depends(require_role(Role.DEVELOPER, Role.SECURITY_ADMIN))],
 ):
     """
     Ad-hoc direct endpoint to generate remediation from a server-configured

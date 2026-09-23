@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 import db.crud as crud
-from api.core.security import get_api_key
+from api.core.rbac import Principal, Role, require_role
 from api.database import get_session
 from api.services.cbom_generator import CBOM_BOM_FORMAT, generate_cbom
 
@@ -58,7 +58,7 @@ _CBOM_CONTENT_TYPE = "application/vnd.cyclonedx+json"
 def get_cbom(
     scan_id: int,
     db: Annotated[Session, Depends(get_session)],
-    _key: Annotated[str, Depends(get_api_key)],
+    user: Annotated[Principal, Depends(require_role(Role.AUDITOR, Role.DEVELOPER, Role.SECURITY_ADMIN))],
     download: bool = Query(
         False,
         description="Set to true to receive file as a download attachment.",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
@@ -15,10 +15,26 @@ RISK_TIERS = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
 CRITICALITIES = ("MEDIUM", "HIGH", "CRITICAL")
 CONFIDENCES = ("low", "medium", "high")
 CONFIDENCE_BANDS = ("VERIFIED", "PROBABLE", "UNVERIFIED")
+ROLES = ("SECURITY_ADMIN", "AUDITOR", "DEVELOPER")
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(Text, unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(Text, index=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("TRUE")
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
+    last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 

@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     API_KEY: Optional[str] = None
     DEBUG: bool = False
 
+    # JWT / bearer-token authentication
+    AUTH_JWT_SECRET: Optional[str] = Field(default=None)
+    AUTH_JWT_TTL_MINUTES: int = Field(default=60, ge=1)
+    AUTH_BOOTSTRAP_ADMIN_USERNAME: str = Field(default="admin", min_length=1)
+    AUTH_BOOTSTRAP_ADMIN_PASSWORD: Optional[str] = None
+    AUTH_JWT_STORE_METHOD: Literal["localStorage", "httpOnly_cookie"] = "localStorage"
+
     # Database Configuration
     # If POSTGRES_* are provided, DATABASE_URL is auto-constructed.
     # If DATABASE_URL is explicitly set in .env, it takes precedence.

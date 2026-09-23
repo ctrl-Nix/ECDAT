@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.core.config import settings
-from api.routers import cbom, findings, remediation, report_sync, scans
+from api.routers import auth, cbom, findings, remediation, report_sync, scans
 
 app = FastAPI(
     title=settings.API_TITLE,
@@ -20,7 +20,7 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=bool(settings.CORS_ORIGINS),
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key", "X-ECDAT-Agent-ID"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-ECDAT-Agent-ID"],
 )
 
 MAX_PAYLOAD_SIZE = 5 * 1024 * 1024  # 5 MB limit
@@ -95,6 +95,8 @@ async def health():
 
 
 # --- Routers ---
+app.include_router(auth.router)
+
 # POST /scans, GET /scans, GET /scans/{id}
 app.include_router(scans.router)
 
