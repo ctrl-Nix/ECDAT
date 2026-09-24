@@ -20,6 +20,7 @@ import {
 import ConfidenceStamp from '../../components/ConfidenceStamp.jsx';
 import FindingsTable from '../../components/FindingsTable.jsx';
 import api from '../../lib/api';
+import { scaleUp, staggerContainer, staggerItem } from '../../motion.constants.js';
 
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
@@ -38,9 +39,9 @@ const STATUS_ICON = {
 function RiskBadge({ tier }) {
   const badgeClass = `badge badge-${(tier || 'LOW').toLowerCase()}`;
   return (
-    <span className={badgeClass}>
+    <motion.span className={badgeClass} variants={scaleUp} initial="hidden" animate="visible">
       {tier}
-    </span>
+    </motion.span>
   );
 }
 
@@ -286,17 +287,16 @@ function OverviewTab({ onNewScan, onSelectFinding }) {
   return (
     <div className="space-y-6">
       {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <motion.div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" variants={staggerContainer} initial="hidden" animate="visible">
         {[
           { title: 'Total Findings', value: mockFindings.length, sub: `${mockFindings.filter(f => f.risk_tier === 'CRITICAL').length} critical`, accent: 'var(--t1)', icon: AlertTriangle },
           { title: 'Active Scans', value: mockScans.filter(s => s.status === 'running').length, sub: 'Running now', accent: 'var(--cyan)', icon: Activity },
           { title: 'Repositories', value: mockScans.length, sub: 'Indexed', accent: 'var(--t1)', icon: Code2 },
           { title: 'Compliance Score', value: '87%', sub: 'NIST PQC ready', accent: 'var(--green)', icon: ShieldCheck },
-        ].map((card, i) => (
+        ].map((card) => (
           <motion.div
             key={card.title}
-            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07 }}
+            variants={staggerItem}
             className="card p-5"
           >
             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>
@@ -307,7 +307,7 @@ function OverviewTab({ onNewScan, onSelectFinding }) {
             <div className="mt-1 text-xs num" style={{ color: 'var(--t2)' }}>{card.sub}</div>
           </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       {/* Charts row */}
       <div className="grid gap-6 xl:grid-cols-[1fr_1.6fr]">
