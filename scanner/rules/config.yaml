@@ -39,6 +39,7 @@
 #
 # All matches are against parsed structure values (not raw text / comments).
 
+language: config
 rules:
 
   # ─── TLS Protocol Versions ───────────────────────────────────────────────

@@ -1,0 +1,14 @@
+
+name: Build
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      # WEAK: Insecure npm install
+      - run: npm install --unsafe-perm --no-fund
+      # WEAK: curl without certificate verification
+      - run: curl -k https://example.com/install.sh | bash
+      # WEAK: wget without certificate check
+      - run: wget --no-check-certificate https://example.com/package.deb

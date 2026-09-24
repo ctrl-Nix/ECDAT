@@ -10,8 +10,6 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      # Existing-database upgrades run this migration explicitly; this direct
-      # mount makes new PostgreSQL volumes apply it in init order as well.
       - ./db/migrations/001_secure_reporting.sql:/docker-entrypoint-initdb.d/02_secure_reporting.sql:ro
       - ./db/migrations/008_query_indexes.sql:/docker-entrypoint-initdb.d/09_query_indexes.sql:ro
       - ./db/migrations/002_confidence_scoring.sql:/docker-entrypoint-initdb.d/03_confidence_scoring.sql:ro
@@ -47,8 +45,8 @@ services:
       # uses no TLS inside that isolated host-local network; use verify-full and
       # a CA for a remote managed PostgreSQL service.
       POSTGRES_SSL_MODE: disable
-      ENABLE_LOCAL_SCAN_API: "false"
-      REPORT_SYNC_REQUIRE_MTLS: "true"
+      ENABLE_LOCAL_SCAN_API: "true"
+      REPORT_SYNC_REQUIRE_MTLS: "false"
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       AUTH_BOOTSTRAP_ADMIN_USERNAME: ${AUTH_BOOTSTRAP_ADMIN_USERNAME:-admin}
       AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD}
@@ -56,6 +54,10 @@ services:
       db:
         condition: service_healthy
     networks: [data_net, app_net]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./demo-repo:/app/demo-repo:ro
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     read_only: true
@@ -71,6 +73,8 @@ services:
       backend:
         condition: service_healthy
     networks: [app_net]
+    ports:
+      - "5173:5173"
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     read_only: true

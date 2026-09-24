@@ -3,6 +3,7 @@
 
 schema: 1
 description: "Container package-inventory rules — maps installed packages to crypto library assets."
+language: container
 rules:
   - ecosystem: deb
     package: libssl3
