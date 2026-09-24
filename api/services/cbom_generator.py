@@ -124,7 +124,7 @@ def generate_cbom(session: Session, scan_id: int) -> dict[str, Any] | None:
 
 def build_cbom_from_findings(
     findings: list[dict[str, Any]],
-    summary: dict[str, Any],
+    summary: dict[str, int],
     organization_id: str | None = None,
     scan_id: int | None = None,
 ) -> dict[str, Any]:
