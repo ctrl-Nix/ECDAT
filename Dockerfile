@@ -12,6 +12,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --chown=ecdat:ecdat . .
+RUN pip install --no-cache-dir -e .
 
 USER ecdat
 EXPOSE 8000
