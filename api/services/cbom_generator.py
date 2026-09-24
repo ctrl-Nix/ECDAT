@@ -16,12 +16,11 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.orm import Session
-
-import db.crud as crud
-from db.models import Finding, RiskAssessment, Scan
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from db.models import Finding, RiskAssessment, Scan
 
 # ---------------------------------------------------------------------------
 # CycloneDX 1.6 constants
@@ -94,6 +93,9 @@ def generate_cbom(session: Session, scan_id: int) -> dict[str, Any] | None:
     Returns:
         CycloneDX CBOM dict (serialisable to JSON), or None if scan not found.
     """
+    import db.crud as crud
+    from db.models import Scan
+
     scan: Scan | None = crud.get_scan(session, scan_id)
     if scan is None:
         return None
@@ -102,19 +104,110 @@ def generate_cbom(session: Session, scan_id: int) -> dict[str, Any] | None:
     summary: dict[str, int] = crud.get_risk_summary(session, scan_id)
 
     assessments = crud.get_risk_assessments_for_scan(session, scan_id)
-    components = [_finding_to_component(f, assessments.get(f.id)) for f in findings]
+    finding_dicts = [
+        _finding_to_dict(finding, assessments.get(finding.id))
+        for finding in findings
+    ]
+    cbom = build_cbom_from_findings(
+        finding_dicts,
+        summary,
+        organization_id=(scan.repository.organization_id if scan.repository else None),
+        scan_id=scan.id,
+    )
+
+    # Keep the API's established scan timestamp and custody metadata. The pure
+    # builder supplies the shared component and risk-summary implementation.
+    cbom["metadata"] = _build_metadata(scan)
+    cbom["x-ecdat-report-provenance"] = _report_provenance(scan)
+    return cbom
+
+
+def build_cbom_from_findings(
+    findings: list[dict[str, Any]],
+    summary: dict[str, Any],
+    organization_id: str | None = None,
+    scan_id: int | None = None,
+) -> dict[str, Any]:
+    """Build a CBOM from already-scored finding dictionaries without a DB.
+
+    Risk values are copied as supplied; this function deliberately does not
+    import or invoke the risk engine. The ORM API entry point calls this same
+    builder after loading rows from the database.
+    """
+    if not isinstance(findings, list):
+        raise ValueError("findings must be a list of objects")
+    required_finding_fields = {
+        "file", "line", "library", "algorithm", "confidence",
+        "risk_tier", "risk_reason", "primitive",
+    }
+    for index, finding in enumerate(findings):
+        if not isinstance(finding, dict):
+            raise ValueError(f"Finding at index {index} must be an object")
+        missing = sorted(required_finding_fields - finding.keys())
+        if missing:
+            raise ValueError(
+                f"Finding at index {index} missing required field: {missing[0]}"
+            )
+        if not isinstance(finding["file"], str) or not isinstance(finding["algorithm"], str):
+            raise ValueError(f"Finding at index {index} has invalid file or algorithm")
+        if type(finding["line"]) is not int or finding["line"] < 0:
+            raise ValueError(f"Finding at index {index} has invalid line")
+        if finding["risk_tier"] is not None and not isinstance(finding["risk_tier"], str):
+            raise ValueError(f"Finding at index {index} has invalid risk_tier")
+        if finding["risk_tier"] not in (None, "UNSCORED", "LOW", "MEDIUM", "HIGH", "CRITICAL"):
+            raise ValueError(f"Finding at index {index} has invalid risk_tier")
+    if not isinstance(summary, dict):
+        raise ValueError("summary must be an object")
+    required_summary_fields = {"total", "CRITICAL", "HIGH", "MEDIUM", "LOW", "UNSCORED"}
+    missing_summary = sorted(required_summary_fields - summary.keys())
+    if missing_summary:
+        raise ValueError(f"Summary missing required field: {missing_summary[0]}")
+    if any(type(summary[key]) is not int or summary[key] < 0 for key in required_summary_fields):
+        raise ValueError("Summary counts must be non-negative integers")
+    counts = {tier: 0 for tier in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNSCORED")}
+    for finding in findings:
+        tier = finding["risk_tier"] or "UNSCORED"
+        counts[tier] += 1
+    if summary["total"] != len(findings):
+        raise ValueError("Summary total does not match the findings count")
+    for tier, count in counts.items():
+        if summary[tier] != count:
+            raise ValueError(f"Summary count for {tier} does not match the findings")
+
+    components = [
+        _finding_dict_to_component(finding, index)
+        for index, finding in enumerate(findings, start=1)
+    ]
+    metadata: dict[str, Any] = {
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "tools": [
+            {
+                "vendor": "ECDAT",
+                "name": "ECDAT — Enterprise Cryptographic Discovery & Assessment Tool",
+                "version": "1.0.0",
+            }
+        ],
+    }
+    if scan_id is not None:
+        metadata["component"] = {
+            "type": "application",
+            "name": f"scan-{scan_id}",
+            "version": "1",
+        }
+    if organization_id is not None:
+        metadata["properties"] = [
+            {"name": "ecdat:organization_id", "value": organization_id}
+        ]
 
     return {
         "bomFormat": CYCLONEDX_FORMAT,
         "specVersion": CYCLONEDX_SPEC_VERSION,
         "serialNumber": f"urn:uuid:{uuid.uuid4()}",
         "version": 1,
-        "metadata": _build_metadata(scan),
+        "metadata": metadata,
         "components": components,
         "externalReferences": [],
-        # ECDAT extension — not a CycloneDX field, namespaced to avoid collision
-        "x-ecdat-risk-summary": summary,
-        "x-ecdat-report-provenance": _report_provenance(scan),
+        "x-ecdat-risk-summary": dict(summary),
     }
 
 
@@ -153,77 +246,112 @@ def _finding_to_component(
 
     Fields follow the actual CycloneDX 1.6 cryptography extension specification.
     """
-    algo = finding.algorithm or "UNKNOWN"
-    primitive = _PRIMITIVE_MAP.get(algo, "other")
-    crypto_functions = _CRYPTO_FUNCTIONS_MAP.get(algo, [])
+    return _finding_dict_to_component(_finding_to_dict(finding, assessment), finding.id)
 
-    # Build the cryptoProperties block (CycloneDX 1.6 crypto extension)
+
+def _finding_to_dict(
+    finding: Finding, assessment: RiskAssessment | None = None
+) -> dict[str, Any]:
+    """Convert ORM evidence to the scored dictionary shape used by the builder."""
+    result = {
+        name: getattr(finding, name)
+        for name in (
+            "id", "file", "line", "algorithm", "key_size", "confidence", "risk_tier",
+            "risk_reason", "criticality", "source_context", "library", "primitive",
+            "confidence_band", "confidence_score", "detection_method", "artifact_type",
+        )
+    }
+    if assessment is not None:
+        result.update(
+            {
+                "risk_model_version": assessment.risk_model_version,
+                "classical_broken": assessment.classical_broken,
+                "quantum_vulnerable": assessment.quantum_vulnerable,
+                "hndl_exposure": assessment.hndl_exposure,
+                "recommended_replacement": assessment.recommended_replacement,
+                "recommendation_type": assessment.recommendation_type,
+                "migration_effort_days": assessment.migration_effort_days,
+                "data_shelf_life_years": assessment.data_shelf_life_years,
+                "quantum_threat_horizon_years": assessment.quantum_threat_horizon_years,
+                "assumption_source": assessment.assumption_source,
+            }
+        )
+    return result
+
+
+def _finding_dict_to_component(
+    finding: dict[str, Any], index: int
+) -> dict[str, Any]:
+    """Map one scored finding dictionary to the generator's component shape."""
+    algo = finding.get("algorithm") or "UNKNOWN"
+    key_size = finding.get("key_size")
     crypto_props: dict[str, Any] = {
         "assetType": "algorithm",
         "algorithmProperties": {
-            "primitive": primitive,
+            "primitive": _PRIMITIVE_MAP.get(algo, "other"),
             "implementationLevel": "softwarePlainRam",
-            "cryptoFunctions": crypto_functions,
+            "cryptoFunctions": list(_CRYPTO_FUNCTIONS_MAP.get(algo, [])),
         },
     }
-    if finding.key_size:
-        crypto_props["algorithmProperties"]["parameterSetIdentifier"] = str(finding.key_size)
-        crypto_props["algorithmProperties"]["keySize"] = finding.key_size
+    if key_size:
+        crypto_props["algorithmProperties"]["parameterSetIdentifier"] = str(key_size)
+        crypto_props["algorithmProperties"]["keySize"] = key_size
 
-    # Evidence — traceable back to scanner source
-    evidence = {
-        "occurrences": [
-            {
-                "location": finding.file,
-                "line": finding.line,
-                "additionalContext": f"Detection confidence: {finding.confidence}",
-            }
-        ]
-    }
-
-    # Risk classification (ECDAT extension within CycloneDX properties)
     properties = [
-        {"name": "ecdat:risk_tier",   "value": finding.risk_tier or "UNSCORED"},
-        {"name": "ecdat:criticality", "value": finding.criticality or "MEDIUM"},
+        {"name": "ecdat:risk_tier", "value": finding.get("risk_tier") or "UNSCORED"},
+        {"name": "ecdat:criticality", "value": finding.get("criticality") or "MEDIUM"},
     ]
-    if finding.risk_reason:
-        properties.append({"name": "ecdat:risk_reason", "value": finding.risk_reason})
-    properties.append({"name": "ecdat:source_context", "value": finding.source_context})
+    if finding.get("risk_reason"):
+        properties.append({"name": "ecdat:risk_reason", "value": finding["risk_reason"]})
+    properties.append({"name": "ecdat:source_context", "value": finding.get("source_context", "SOURCE")})
+    extension_properties = (
+        ("ecdat:confidence_band", "confidence_band"),
+        ("ecdat:confidence_score", "confidence_score"),
+        ("ecdat:detection_method", "detection_method"),
+        ("ecdat:artifact_type", "artifact_type"),
+    )
+    for property_name, field_name in extension_properties:
+        value = finding.get(field_name)
+        if value is not None:
+            properties.append({"name": property_name, "value": str(value)})
 
-    if assessment:
-        properties.extend([
-            {"name": "ecdat:risk_model_version", "value": assessment.risk_model_version},
-            {"name": "ecdat:classical_broken", "value": str(assessment.classical_broken).lower()},
-            {"name": "ecdat:quantum_vulnerable", "value": str(assessment.quantum_vulnerable).lower()},
-            {"name": "ecdat:hndl_exposure", "value": assessment.hndl_exposure},
-        ])
-        optional_properties = {
-            "ecdat:recommended_replacement": assessment.recommended_replacement,
-            "ecdat:recommendation_type": assessment.recommendation_type,
-            "ecdat:migration_effort_days": assessment.migration_effort_days,
-            "ecdat:data_shelf_life_years": assessment.data_shelf_life_years,
-            "ecdat:quantum_threat_horizon_years": assessment.quantum_threat_horizon_years,
-            "ecdat:assumption_source": assessment.assumption_source,
-        }
-        for name, value in optional_properties.items():
-            if value is not None:
-                properties.append({"name": name, "value": str(value)})
+    assessment_properties = (
+        ("ecdat:risk_model_version", "risk_model_version", False),
+        ("ecdat:classical_broken", "classical_broken", True),
+        ("ecdat:quantum_vulnerable", "quantum_vulnerable", True),
+        ("ecdat:hndl_exposure", "hndl_exposure", False),
+        ("ecdat:recommended_replacement", "recommended_replacement", False),
+        ("ecdat:recommendation_type", "recommendation_type", False),
+        ("ecdat:migration_effort_days", "migration_effort_days", False),
+        ("ecdat:data_shelf_life_years", "data_shelf_life_years", False),
+        ("ecdat:quantum_threat_horizon_years", "quantum_threat_horizon_years", False),
+        ("ecdat:assumption_source", "assumption_source", False),
+    )
+    for property_name, field_name, boolean in assessment_properties:
+        value = finding.get(field_name)
+        if value is not None:
+            properties.append(
+                {"name": property_name, "value": str(value).lower() if boolean else str(value)}
+            )
 
-    # Recommended migration (PQC direction from risk_engine → stored in DB via save_findings)
-    # We surface it as a property since CycloneDX has no migration field yet.
-    # (Fields come from the scored finding dict persisted by scan_runner.)
-
+    file_name = finding.get("file", "unknown")
+    line = finding.get("line", 0)
+    confidence = finding.get("confidence", "unverified")
     return {
         "type": "cryptographic-asset",
-        "bom-ref": f"finding-{finding.id}",
+        "bom-ref": str(finding.get("bom_ref") or f"finding-{finding.get('id', index)}"),
         "name": algo,
-        "version": _infer_version(algo, finding.key_size),
-        "description": (
-            f"{algo} detected at {finding.file}:{finding.line} "
-            f"(confidence={finding.confidence})"
-        ),
+        "version": _infer_version(algo, key_size),
+        "description": f"{algo} detected at {file_name}:{line} (confidence={confidence})",
         "cryptoProperties": crypto_props,
-        "evidence": evidence,
+        "evidence": {
+            "occurrences": [
+                {
+                    "location": file_name,
+                    "line": line,
+                }
+            ]
+        },
         "properties": properties,
     }
 
