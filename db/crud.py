@@ -415,18 +415,42 @@ def ingest_signed_report(
 def get_findings_for_scan(
     session: Session,
     scan_id: int,
-    risk_tier: str | None = None,
+    risk_tier: str | list[str] | None = None,
+    primitive: str | list[str] | None = None,
+    algorithm: str | list[str] | None = None,
+    language: str | list[str] | None = None,
+    sort_by: str | None = None,
+    sort_dir: str = "asc",
     min_band: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Finding]:
-    """Findings for a scan, optionally filtered by risk tier and/or min_band.
+    """Findings for a scan, optionally filtered and sorted.
 
     Uses idx_findings_scan_id (and idx_findings_severity / idx_findings_confidence_band).
     """
     stmt = select(Finding).where(Finding.scan_id == scan_id)
-    if risk_tier:
-        stmt = stmt.where(Finding.risk_tier == risk_tier.strip().upper())
+
+    def normalize_filter(
+        value: str | list[str] | None, *, uppercase: bool = False
+    ) -> list[str]:
+        if value is None:
+            return []
+        values = [value] if isinstance(value, str) else value
+        normalized = [item.strip() for item in values if item.strip()]
+        return [item.upper() for item in normalized] if uppercase else normalized
+
+    risk_tiers = normalize_filter(risk_tier, uppercase=True)
+    if risk_tiers:
+        stmt = stmt.where(Finding.risk_tier.in_(risk_tiers))
+    for column, value in (
+        (Finding.primitive, primitive),
+        (Finding.algorithm, algorithm),
+        (Finding.language, language),
+    ):
+        values = normalize_filter(value)
+        if values:
+            stmt = stmt.where(column.in_(values))
     if min_band:
         upper_band = min_band.strip().upper()
         if upper_band == "VERIFIED":
@@ -435,7 +459,12 @@ def get_findings_for_scan(
             stmt = stmt.where(Finding.confidence_band.in_(["VERIFIED", "PROBABLE"]))
         elif upper_band == "UNVERIFIED":
             stmt = stmt.where(Finding.confidence_band.in_(["VERIFIED", "PROBABLE", "UNVERIFIED"]))
-    stmt = stmt.order_by(Finding.id).offset(offset)
+    if sort_by is None:
+        stmt = stmt.order_by(Finding.id)
+    else:
+        sort_column = getattr(Finding, sort_by)
+        stmt = stmt.order_by(sort_column.desc() if sort_dir.lower() == "desc" else sort_column.asc())
+    stmt = stmt.offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(session.scalars(stmt).all())

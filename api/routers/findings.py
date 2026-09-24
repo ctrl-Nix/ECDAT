@@ -24,9 +24,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import db.crud as crud
+from api.core.params import FindingListParams, common_list_params
 from api.core.rbac import Principal, Role, require_role
 from api.database import get_session
 from api.models import FindingOut, RiskSummary
+from db.models import RISK_TIERS
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +47,9 @@ class FindingsPageResponse(BaseModel):
     offset: int
     limit: int
     risk_tier_filter: str | None = None
+    filters: dict[str, list[str] | None]
+    sort_by: str | None = None
+    sort_dir: str = "asc"
     summary: RiskSummary
 
 
@@ -66,18 +71,12 @@ def list_findings(
     scan_id: int,
     db: Annotated[Session, Depends(get_session)],
     user: Annotated[Principal, Depends(require_role(Role.AUDITOR, Role.DEVELOPER, Role.SECURITY_ADMIN))],
-    risk_tier: str | None = Query(
-        None,
-        description="Filter by risk tier: CRITICAL, HIGH, MEDIUM, or LOW.",
-        pattern="^(CRITICAL|HIGH|MEDIUM|LOW)$",
-    ),
+    params: Annotated[FindingListParams, Depends(common_list_params)],
     min_band: str | None = Query(
         None,
         description="Return findings whose confidence_band meets or exceeds this level.",
         pattern="^(VERIFIED|PROBABLE|UNVERIFIED)$",
     ),
-    limit: int = Query(50, ge=1, le=200, description="Max findings per page."),
-    offset: int = Query(0, ge=0, description="Pagination offset."),
 ) -> Any:
     """GET /scans/{scan_id}/findings — paginated, filtered findings list."""
     scan = crud.get_scan(db, scan_id)
@@ -87,13 +86,25 @@ def list_findings(
             detail=f"Scan {scan_id} not found.",
         )
 
+    risk_tiers = [tier.strip().upper() for tier in params.risk_tier or []]
+    if invalid_tiers := [tier for tier in risk_tiers if tier not in RISK_TIERS]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid risk_tier value(s): {', '.join(invalid_tiers)}",
+        )
+
     findings = crud.get_findings_for_scan(
         db,
         scan_id=scan_id,
-        risk_tier=risk_tier,
+        risk_tier=risk_tiers or None,
+        primitive=params.primitive,
+        algorithm=params.algorithm,
+        language=params.language,
+        sort_by=params.sort_by,
+        sort_dir=params.sort_dir,
         min_band=min_band,
-        limit=limit,
-        offset=offset,
+        limit=params.limit,
+        offset=params.offset,
     )
     summary = crud.get_risk_summary(db, scan_id)
 
@@ -101,9 +112,17 @@ def list_findings(
         "scan_id": scan_id,
         "findings": findings,
         "total_on_page": len(findings),
-        "offset": offset,
-        "limit": limit,
-        "risk_tier_filter": risk_tier,
+        "offset": params.offset,
+        "limit": params.limit,
+        "risk_tier_filter": risk_tiers[0] if risk_tiers else None,
+        "filters": {
+            "risk_tier": risk_tiers or None,
+            "primitive": params.primitive or None,
+            "algorithm": params.algorithm or None,
+            "language": params.language or None,
+        },
+        "sort_by": params.sort_by,
+        "sort_dir": params.sort_dir,
         "summary": summary,
     }
 

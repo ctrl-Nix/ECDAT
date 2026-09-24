@@ -111,6 +111,10 @@ CREATE INDEX IF NOT EXISTS idx_findings_package
     ON findings(package_ecosystem, package_name)
     WHERE package_name IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_findings_scan_tier   ON findings(scan_id, risk_tier);
+CREATE INDEX IF NOT EXISTS idx_findings_scan_lang   ON findings(scan_id, language);
+CREATE INDEX IF NOT EXISTS idx_scans_repo_started   ON scans(repo_id, started_at DESC);
+
 -- Immutable interpretation and custody records. The raw finding remains a
 -- discovery fact; the assessment can be recomputed under a new model version.
 CREATE TABLE IF NOT EXISTS risk_assessments (
