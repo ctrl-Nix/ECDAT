@@ -1,5 +1,5 @@
 import ProjectDemoWalkthrough from '../../components/ProjectDemoWalkthrough';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity, Bell, ChevronDown, ChevronRight, Download, FileText,
@@ -18,6 +18,7 @@ import {
   mockFindings, mockScans, mockCbom, trendData, donutData,
 } from '../../mockData.js';
 import ConfidenceStamp from '../../components/ConfidenceStamp.jsx';
+import FindingsTable from '../../components/FindingsTable.jsx';
 import api from '../../lib/api';
 
 
@@ -413,125 +414,40 @@ function OverviewTab({ onNewScan, onSelectFinding }) {
 }
 
 /* ─── Findings Tab ───────────────────────────────────────────────────────── */
-function FindingsTab({ onSelectFinding }) {
-  const [search, setSearch] = useState('');
-  const [tierFilter, setTierFilter] = useState('All');
-  const [quantumOnly, setQuantumOnly] = useState(false);
+function useLatestScanId(enabled = true, refreshKey = 0) {
+  const [scanId, setScanId] = useState(null);
+  const [status, setStatus] = useState(enabled ? 'loading' : 'idle');
+  const [error, setError] = useState(null);
 
-  const filtered = useMemo(() => {
-    return mockFindings.filter((f) => {
-      const matchTier = tierFilter === 'All' || f.risk_tier === tierFilter;
-      const matchSearch = !search || f.file.toLowerCase().includes(search.toLowerCase())
-        || f.algorithm.toLowerCase().includes(search.toLowerCase());
-      const matchQ = !quantumOnly || f.quantum_vulnerable;
-      return matchTier && matchSearch && matchQ;
-    });
-  }, [search, tierFilter, quantumOnly]);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let active = true;
+    setStatus('loading');
+    api.get('/scans', { params: { limit: 1 } })
+      .then(({ data }) => {
+        if (!active) return;
+        const latest = data?.scans?.[0];
+        setScanId(latest?.id ?? null);
+        setStatus(latest ? 'success' : 'empty');
+      })
+      .catch((requestError) => {
+        if (!active) return;
+        setError(requestError?.response?.data?.detail || requestError.message || 'Could not load scans.');
+        setStatus('error');
+      });
+    return () => { active = false; };
+  }, [enabled, refreshKey]);
 
-  return (
-    <div className="space-y-4">
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 rounded-xl border px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'var(--surface-h)' }}>
-          <Search className="h-4 w-4 shrink-0" style={{ color: 'var(--t3)' }} />
-          <input
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search file or algorithm…"
-            className="bg-transparent text-sm focus:outline-none w-52"
-            style={{ color: 'var(--t1)' }}
-          />
-        </div>
-        <div className="flex items-center gap-1 rounded-xl border p-1" style={{ borderColor: 'var(--border)', background: 'var(--surface-h)' }}>
-          {['All', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((t) => (
-            <button key={t}
-              onClick={() => setTierFilter(t)}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-              style={{
-                background: tierFilter === t ? 'var(--cyan-10)' : 'transparent',
-                color: tierFilter === t ? 'var(--cyan)' : 'var(--t2)',
-              }}>
-              {t}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => setQuantumOnly((v) => !v)}
-          className="flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-medium transition-colors badge"
-          style={{
-             borderColor: quantumOnly ? 'rgba(157,110,248,0.25)' : 'var(--border)',
-             background: quantumOnly ? 'var(--purple-10)' : 'transparent',
-             color: quantumOnly ? 'var(--purple)' : 'var(--t2)'
-          }}>
-          <Zap className="h-3.5 w-3.5" /> Quantum only
-        </button>
-        <button
-          onClick={() => {
-            const blob = new Blob([JSON.stringify(mockCbom, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = 'ecdat-cbom.json'; a.click();
-          }}
-          className="btn-ghost ml-auto flex items-center gap-2">
-          <Download className="h-3.5 w-3.5" /> Export CBOM
-        </button>
-      </div>
-
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Risk Tier</th>
-              <th>Algorithm</th>
-              <th>File</th>
-              <th>Line</th>
-              <th>Confidence</th>
-              <th>Quantum</th>
-              <th>Date</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-8 text-sm" style={{ color: 'var(--t3)' }}>No findings match filters</td></tr>
-            )}
-            {filtered.map((f) => (
-              <motion.tr
-                key={f.id}
-                onClick={() => onSelectFinding(f)}
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="cursor-pointer"
-              >
-                <td><RiskBadge tier={f.risk_tier} /></td>
-                <td className="mono font-semibold" style={{ color: 'var(--t1)' }}>{f.algorithm}</td>
-                <td className="mono" style={{ color: 'var(--t1)' }}>{f.file}</td>
-                <td className="num" style={{ color: 'var(--t2)' }}>{f.line}</td>
-                <td>
-                  <ConfidenceStamp
-                    band={f.confidence_band || (f.confidence === 'high' ? 'VERIFIED' : 'UNVERIFIED')}
-                    score={f.confidence_score}
-                    signals={f.confidence_signals}
-                  />
-                </td>
-                <td>
-                  {f.quantum_vulnerable
-                    ? <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--purple)' }}><Zap className="h-3 w-3" />Yes</span>
-                    : <span className="text-xs" style={{ color: 'var(--t3)' }}>—</span>}
-                </td>
-                <td className="text-xs num" style={{ color: 'var(--t2)' }}>{f.date}</td>
-                <td className="text-right">
-                  <ChevronRight className="h-4 w-4 inline" style={{ color: 'var(--t3)' }} />
-                </td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="text-xs text-right num" style={{ color: 'var(--t3)' }}>{filtered.length} of {mockFindings.length} findings</div>
-    </div>
-  );
+  return { scanId, status, error };
 }
 
-/* ─── Scan History Tab ───────────────────────────────────────────────────── */
+function FindingsTab() {
+  const { scanId, status, error } = useLatestScanId();
+  if (status === 'loading') return <div className="card p-6 text-sm" style={{ color: 'var(--t2)' }}>Loading latest scan…</div>;
+  if (status === 'error') return <div role="alert" className="card p-6 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>;
+  if (!scanId) return <div className="card p-6 text-sm" style={{ color: 'var(--t2)' }}>No scans are available yet.</div>;
+  return <FindingsTable scanId={scanId} embedded />;
+}
 function ScansTab({ onNewScan }) {
   return (
     <div className="space-y-4">
@@ -795,178 +711,29 @@ function SettingsTab({ onLogout }) {
 }
 
 /* ─── Live Scan Tab ──────────────────────────────────────────────────────── */
-// Maps a backend FindingOut (with nested risk_assessment) to the flat shape
-// the table + FindingPanel expect.
-function mapLiveFinding(f, scan) {
-  const ra = f.risk_assessment || {};
-  return {
-    id: f.id,
-    file: f.file,
-    line: f.line,
-    algorithm: f.algorithm,
-    language: f.language,
-    risk_tier: f.risk_tier,
-    confidence: f.confidence,
-    quantum_vulnerable: ra.quantum_vulnerable ?? false,
-    classical_broken: ra.classical_broken ?? false,
-    replacement: ra.recommended_replacement ?? null,
-    summary: f.risk_reason || '—',
-    date: scan?.started_at ? new Date(scan.started_at).toLocaleString() : '',
-  };
-}
-
-const TIER_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNSCORED: 4 };
-
-function LiveScanTab({ onSelectFinding }) {
-  const [status, setStatus] = useState('idle'); // idle | loading | success | empty | error
-  const [scan, setScan] = useState(null);
-  const [summary, setSummary] = useState(null);
-  const [findings, setFindings] = useState([]);
-  const [error, setError] = useState(null);
-
-  const fetchLive = useCallback(async () => {
-    setStatus('loading');
-    setError(null);
-    try {
-      // Newest scan first, then its full detail (findings + risk summary).
-      const list = await api.get('/scans', { params: { limit: 1 } });
-      const latest = list.data?.scans?.[0];
-      if (!latest) {
-        setStatus('empty');
-        return;
-      }
-      const detail = await api.get(`/scans/${latest.id}`);
-      const s = detail.data.scan;
-      const mapped = (detail.data.findings || [])
-        .map((f) => mapLiveFinding(f, s))
-        .sort((a, b) => (TIER_ORDER[a.risk_tier] ?? 9) - (TIER_ORDER[b.risk_tier] ?? 9));
-      setScan(s);
-      setSummary(detail.data.summary || null);
-      setFindings(mapped);
-      setStatus('success');
-    } catch (err) {
-      const msg = err?.response?.status
-        ? `API error ${err.response.status}: ${err.response.data?.detail || 'request failed'}`
-        : `Cannot reach the backend (${err.message}). Is the stack running (docker compose up)?`;
-      setError(msg);
-      setStatus('error');
-    }
-  }, []);
-
-  const TIERS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+function LiveScanTab() {
+  const [requested, setRequested] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { scanId, status, error } = useLatestScanId(requested, refreshKey);
 
   return (
     <div className="space-y-5">
-      {/* Header + fetch button */}
-      <div className="card p-5 flex flex-wrap items-center justify-between gap-4">
+      <div className="card flex flex-wrap items-center justify-between gap-4 p-5">
         <div>
           <div className="text-sm font-semibold" style={{ color: 'var(--t1)' }}>Live scan from the database</div>
-          <div className="text-xs mt-1 num" style={{ color: 'var(--t2)' }}>
-            Fetches the most recent scan persisted in the PostgreSQL container — findings + risk assessments, no mock data.
-          </div>
+          <div className="mt-1 text-xs" style={{ color: 'var(--t2)' }}>Read-only view of findings from the most recent persisted scan.</div>
         </div>
-        <button
-          onClick={fetchLive}
-          disabled={status === 'loading'}
-          className="btn-primary flex items-center gap-2"
-        >
-          {status === 'loading'
-            ? <><LoaderCircle className="h-4 w-4 animate-spin" /> Fetching…</>
-            : <><RefreshCw className="h-4 w-4" /> Fetch live scan</>}
+        <button onClick={() => { setRequested(true); setRefreshKey((value) => value + 1); }} disabled={status === 'loading'} className="btn-primary flex items-center gap-2">
+          {status === 'loading' ? <><LoaderCircle className="h-4 w-4 animate-spin" /> Fetching…</> : <><RefreshCw className="h-4 w-4" /> Fetch live scan</>}
         </button>
       </div>
-
-      {status === 'idle' && (
-        <div className="card p-8 text-center text-sm" style={{ color: 'var(--t3)' }}>
-          Click <span style={{ color: 'var(--cyan)' }}>Fetch live scan</span> to load the latest results from the container database.
-        </div>
-      )}
-
-      {status === 'error' && (
-        <div className="card p-5 flex items-start gap-3" style={{ borderColor: 'rgba(255,61,61,0.25)' }}>
-          <AlertTriangle className="h-5 w-5 shrink-0" style={{ color: 'var(--critical)' }} />
-          <div className="text-sm" style={{ color: 'var(--critical)' }}>{error}</div>
-        </div>
-      )}
-
-      {status === 'empty' && (
-        <div className="card p-8 text-center text-sm" style={{ color: 'var(--t3)' }}>
-          No scans found in the database yet. Run a scan first, then fetch again.
-        </div>
-      )}
-
-      {status === 'success' && (
-        <>
-          {/* Scan meta + summary chips */}
-          <div className="card p-5 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--t2)' }}>
-              <span className={`badge ${STATUS_STYLE[scan?.status] || 'badge-low'} flex gap-1.5 items-center`}>
-                {STATUS_ICON[scan?.status]} {scan?.status}
-              </span>
-              <span className="num">Scan #{scan?.id}</span>
-              {scan?.started_at && <span className="num">{new Date(scan.started_at).toLocaleString()}</span>}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {TIERS.map((t) => (
-                <span key={t} className={`badge badge-${t.toLowerCase()}`}>
-                  {t} {summary?.[t] ?? 0}
-                </span>
-              ))}
-              <span className="text-xs num" style={{ color: 'var(--t3)' }}>· {summary?.total ?? findings.length} total</span>
-            </div>
-          </div>
-
-          {/* Findings table */}
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Risk Tier</th>
-                    <th>Algorithm</th>
-                    <th>File</th>
-                    <th>Line</th>
-                    <th>Lang</th>
-                    <th>Classical</th>
-                    <th>Quantum</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {findings.length === 0 && (
-                    <tr><td colSpan={8} className="text-center py-8 text-sm" style={{ color: 'var(--t3)' }}>Scan completed with no findings.</td></tr>
-                  )}
-                  {findings.map((f) => (
-                    <tr key={f.id} onClick={() => onSelectFinding(f)} className="cursor-pointer">
-                      <td><RiskBadge tier={f.risk_tier} /></td>
-                      <td className="mono font-semibold" style={{ color: 'var(--t1)' }}>{f.algorithm}</td>
-                      <td className="mono" style={{ color: 'var(--t1)' }}>{f.file}</td>
-                      <td className="num" style={{ color: 'var(--t2)' }}>{f.line}</td>
-                      <td className="text-xs" style={{ color: 'var(--t2)' }}>{f.language}</td>
-                      <td>
-                        {f.classical_broken
-                          ? <span className="text-xs" style={{ color: 'var(--critical)' }}>Broken</span>
-                          : <span className="text-xs" style={{ color: 'var(--t3)' }}>—</span>}
-                      </td>
-                      <td>
-                        {f.quantum_vulnerable
-                          ? <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--purple)' }}><Zap className="h-3 w-3" />Yes</span>
-                          : <span className="text-xs" style={{ color: 'var(--t3)' }}>—</span>}
-                      </td>
-                      <td className="text-right"><ChevronRight className="h-4 w-4 inline" style={{ color: 'var(--t3)' }} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
+      {status === 'idle' && <div className="card p-6 text-center text-sm" style={{ color: 'var(--t3)' }}>Fetch the latest scan to view its findings.</div>}
+      {status === 'error' && <div role="alert" className="card p-5 text-sm" style={{ color: 'var(--critical)' }}>{error}</div>}
+      {status === 'empty' && <div className="card p-6 text-center text-sm" style={{ color: 'var(--t3)' }}>No scans found in the database yet.</div>}
+      {status === 'success' && scanId && <FindingsTable scanId={scanId} embedded />}
     </div>
   );
 }
-
-/* ─── Main DashboardPage ─────────────────────────────────────────────────── */
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [showNewScan, setShowNewScan] = useState(false);

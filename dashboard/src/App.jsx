@@ -8,6 +8,7 @@ import { useAuth } from './context/AuthContext.jsx';
 const LandingPage = lazy(() => import('./pages/LandingPage/index.jsx'));
 const LoginPage = lazy(() => import('./pages/LoginPage/index.jsx'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage/index.jsx'));
+const FindingsPage = lazy(() => import('./pages/FindingsPage/index.jsx'));
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -109,6 +110,7 @@ function AppShell() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/dashboard/findings" element={<ProtectedRoute><FindingsPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

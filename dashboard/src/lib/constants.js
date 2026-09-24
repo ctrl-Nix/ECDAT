@@ -5,11 +5,23 @@ export const appRoutes = {
 };
 
 export const riskColors = {
-  CRITICAL: 'var(--risk-critical)',
-  HIGH: 'var(--risk-high)',
-  MEDIUM: 'var(--risk-medium)',
-  LOW: 'var(--risk-low)',
+  CRITICAL: 'var(--critical)',
+  HIGH: 'var(--high)',
+  MEDIUM: 'var(--medium)',
+  LOW: 'var(--low)',
 };
+
+export const findingColumns = [
+  { key: 'risk_tier', header: 'Risk Tier', sortable: true, accessor: (f) => f.risk_tier },
+  { key: 'algorithm', header: 'Algorithm', sortable: true, accessor: (f) => f.algorithm },
+  { key: 'file', header: 'File', sortable: true, accessor: (f) => f.file },
+  { key: 'line', header: 'Line', sortable: false, accessor: (f) => (f.line === 0 ? '—' : f.line) },
+  { key: 'primitive', header: 'Primitive', sortable: true, accessor: (f) => f.primitive ?? '—' },
+  { key: 'language', header: 'Language', sortable: true, accessor: (f) => f.language ?? '—' },
+  { key: 'confidence', header: 'Confidence', sortable: false, accessor: (f) => f.confidence_band ?? f.confidence },
+];
+
+export const riskTierOptions = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
 export const CONFIDENCE_BANDS = ["VERIFIED", "PROBABLE", "UNVERIFIED"];
 export const CONFIDENCE_BAND_LABELS = {
